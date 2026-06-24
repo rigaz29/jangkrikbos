@@ -516,6 +516,13 @@ export async function runScreeningCycle({ silent = false } = {}) {
         filteredOut.push({ name: pool.name, reason: `bot holders ${botPct}% > ${maxBotHoldersPct}%` });
         return false;
       }
+      const top10Pct = ti?.audit?.top_holders_pct;
+      const maxTop10Pct = config.screening.maxTop10Pct;
+      if (top10Pct != null && maxTop10Pct != null && top10Pct > maxTop10Pct) {
+        log("screening", `Top10 filter: dropped ${pool.name} — top10 ${top10Pct}% > ${maxTop10Pct}%`);
+        filteredOut.push({ name: pool.name, reason: `top10 holders ${top10Pct}% > ${maxTop10Pct}%` });
+        return false;
+      }
       return true;
     });
 
