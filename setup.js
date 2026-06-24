@@ -66,24 +66,53 @@ function askChoice(question, choices) {
   });
 }
 
+function askEnum(question, defaultVal, allowed) {
+  return new Promise(async (resolve) => {
+    while (true) {
+      const raw = await ask(question, defaultVal);
+      const v = String(raw).trim().toLowerCase();
+      if (allowed.includes(v)) { resolve(v); break; }
+      console.log(`  ⚠ Choose one of: ${allowed.join(", ")}`);
+    }
+  });
+}
+
 function parseEnv(content) {
   const map = {};
   for (const line of content.split("\n")) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
     if (m) map[m[1]] = m[2].replace(/^["']|["']$/g, "");
   }
   return map;
 }
 
-function buildEnv(map) {
-  return Object.entries(map).map(([k, v]) => `${k}=${v}`).join("\n") + "\n";
+// Update KEY=value lines in place, preserving comments and untouched lines;
+// append keys that aren't present yet. Avoids wiping .env comments on re-run.
+function upsertEnv(raw, updates) {
+  const remaining = { ...updates };
+  const lines = raw.length ? raw.split("\n") : [];
+  const out = lines.map((line) => {
+    const m = line.match(/^([A-Z0-9_]+)=/);
+    if (m && Object.prototype.hasOwnProperty.call(remaining, m[1])) {
+      const key = m[1];
+      const val = remaining[key];
+      delete remaining[key];
+      return `${key}=${val}`;
+    }
+    return line;
+  });
+  let result = out.join("\n");
+  const appended = Object.entries(remaining).map(([k, v]) => `${k}=${v}`);
+  if (result.length && !result.endsWith("\n")) result += "\n";
+  if (appended.length) result += appended.join("\n") + "\n";
+  return result;
 }
 
 // ─── Presets ──────────────────────────────────────────────────────────────────
 const PRESETS = {
   degen: {
     label:                 "Degen",
-    timeframe:             "30m",
+    timeframe:             "15m",
     minOrganic:            60,
     minHolders:            200,
     maxMcap:               5_000_000,
@@ -92,7 +121,7 @@ const PRESETS = {
     outOfRangeWaitMinutes: 15,
     managementIntervalMin: 5,
     screeningIntervalMin:  15,
-    description: "30m timeframe, pumping tokens allowed, fast cycles. High risk/reward.",
+    description: "15m timeframe, pumping tokens allowed, fast cycles. High risk/reward.",
   },
   moderate: {
     label:                 "Moderate",
@@ -123,9 +152,14 @@ const PRESETS = {
 };
 
 // ─── Load existing state ───────────────────────────────────────────────────────
-const existingConfig = fs.existsSync(CONFIG_PATH)
-  ? JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"))
-  : {};
+let existingConfig = {};
+if (fs.existsSync(CONFIG_PATH)) {
+  try {
+    existingConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+  } catch (err) {
+    console.log(`  ⚠ Could not parse user-config.json (${err.message}) — starting from defaults.`);
+  }
+}
 const existingEnv = fs.existsSync(ENV_PATH)
   ? parseEnv(fs.readFileSync(ENV_PATH, "utf8"))
   : {};
@@ -211,6 +245,11 @@ const telegramChatId = await ask(
   ev("TELEGRAM_CHAT_ID", e("telegramChatId", ""))
 );
 
+const telegramAllowedIds = await ask(
+  "Telegram allowed user IDs (comma-separated — required for group control, optional)",
+  ev("TELEGRAM_ALLOWED_USER_IDS", "")
+);
+
 // ─── Section 3: Preset ────────────────────────────────────────────────────────
 const presetChoice = await askChoice("Select a risk preset:", [
   { label: `🔥 Degen    — ${PRESETS.degen.description}`,    key: "degen"    },
@@ -256,9 +295,11 @@ const dryRun = await askBool(
 // ─── Section 5: Risk & Filters ────────────────────────────────────────────────
 console.log("\n── Risk & Filters ────────────────────────────────────────────");
 
-const timeframe = await ask(
-  "Pool discovery timeframe (30m / 1h / 4h / 12h / 24h)",
-  p("timeframe", "4h")
+const TIMEFRAMES = ["5m", "15m", "1h", "2h", "4h", "24h"];
+const timeframe = await askEnum(
+  "Pool discovery timeframe (5m / 15m / 1h / 2h / 4h / 24h)",
+  p("timeframe", "4h"),
+  TIMEFRAMES
 );
 
 const minOrganic = await askNum(
@@ -378,8 +419,7 @@ rl.close();
 // ─── Write .env ───────────────────────────────────────────────────────────────
 const isKept = (val) => !val || val.startsWith("***");
 
-const envMap = {
-  ...existingEnv,
+const envUpdates = {
   ...(isKept(walletKey)     ? {} : { WALLET_PRIVATE_KEY: walletKey }),
   ...(rpcUrl                ? { RPC_URL: rpcUrl } : {}),
   ...(isKept(heliusKey)     ? {} : { HELIUS_API_KEY: heliusKey }),
@@ -390,9 +430,11 @@ const envMap = {
   ...(okxProjectId          ? { OKX_PROJECT_ID: okxProjectId } : {}),
   ...(isKept(telegramToken) ? {} : { TELEGRAM_BOT_TOKEN: telegramToken }),
   ...(telegramChatId        ? { TELEGRAM_CHAT_ID: telegramChatId } : {}),
+  ...(telegramAllowedIds    ? { TELEGRAM_ALLOWED_USER_IDS: telegramAllowedIds } : {}),
   DRY_RUN: dryRun ? "true" : "false",
 };
-fs.writeFileSync(ENV_PATH, buildEnv(envMap));
+const rawEnv = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, "utf8") : "";
+fs.writeFileSync(ENV_PATH, upsertEnv(rawEnv, envUpdates));
 
 // ─── Write user-config.json ────────────────────────────────────────────────────
 const userConfig = {
