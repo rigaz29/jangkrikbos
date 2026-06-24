@@ -724,6 +724,18 @@ export async function claimFees({ position_address }) {
     poolCache.delete(poolAddress.toString());
     const pool = await getPool(poolAddress);
 
+    // Best-effort: snapshot the USD value of fees about to be claimed (for accounting).
+    // claimSwapFee returns no USD figure, so pull it from the PnL API before claiming.
+    let claimedFeeUsd = 0;
+    try {
+      const pnlSnapshot = await getPositionPnl({ pool_address: poolAddress.toString(), position_address });
+      if (pnlSnapshot && !pnlSnapshot.error && Number.isFinite(pnlSnapshot.unclaimed_fee_usd)) {
+        claimedFeeUsd = pnlSnapshot.unclaimed_fee_usd;
+      }
+    } catch (e) {
+      log("claim_warn", `Could not snapshot fee USD before claim: ${e.message}`);
+    }
+
     const positionData = await pool.getPosition(new PublicKey(position_address));
     const txs = await pool.claimSwapFee({
       owner: wallet.publicKey,
@@ -741,7 +753,7 @@ export async function claimFees({ position_address }) {
     }
     log("claim", `SUCCESS txs: ${txHashes.join(", ")}`);
     _positionsCacheAt = 0; // invalidate cache after claim
-    recordClaim(position_address);
+    recordClaim(position_address, claimedFeeUsd);
 
     return { success: true, position: position_address, txs: txHashes, base_mint: pool.lbPair.tokenXMint.toString() };
   } catch (error) {
