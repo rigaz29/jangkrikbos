@@ -1,6 +1,5 @@
 {
   "maxPositions": 3,
-  "maxDeployAmount": 50,
   "minFeeActiveTvlRatio": 0.05,
   "minTvl": 10000,
   "maxTvl": 150000,
@@ -38,7 +37,6 @@
   "minSolToOpen": 0.55,
   "deployAmountSol": 0.5,
   "gasReserve": 0.2,
-  "positionSizePct": 0.35,
   "trailingTakeProfit": true,
   "trailingTriggerPct": 3,
   "trailingDropPct": 1.5,
@@ -71,7 +69,6 @@
   "dryRun": true,
   "_help": {
     "maxPositions": "Max concurrent open LP positions.",
-    "maxDeployAmount": "Hard ceiling on SOL deployed per position.",
     "minFeeActiveTvlRatio": "Min fee/active-TVL ratio (%), measured over `timeframe`. Scale this with the timeframe.",
     "minTvl": "Min pool TVL (USD).",
     "maxTvl": "Max pool TVL (USD).",
@@ -107,9 +104,8 @@
     "minFeePerTvl24h": "Min fee/TVL (24h, fixed window) before closing for low yield.",
     "minAgeBeforeYieldCheck": "Minutes before the low-yield close rule can trigger.",
     "minSolToOpen": "Min wallet SOL before opening a new position.",
-    "deployAmountSol": "Base/floor SOL per new position.",
+    "deployAmountSol": "Fixed SOL deployed per new position.",
     "gasReserve": "SOL kept aside for gas.",
-    "positionSizePct": "Fraction of deployable balance to use (compounds with wallet).",
     "trailingTakeProfit": "Enable trailing take-profit.",
     "trailingTriggerPct": "Activate trailing once PnL reaches this %.",
     "trailingDropPct": "Close when PnL drops this % from the confirmed peak.",
@@ -124,10 +120,10 @@
     "temperature": "LLM sampling temperature.",
     "maxTokens": "Max output tokens per LLM call.",
     "maxSteps": "Max ReAct steps per agent run.",
-    "managementModel": "Model for management cycles.",
-    "screeningModel": "Model for screening cycles.",
-    "generalModel": "Model for REPL / chat.",
+    "managementModel": "Model for management cycles (falls back to env LLM_MODEL).",
+    "screeningModel": "Model for screening cycles (falls back to env LLM_MODEL).",
+    "generalModel": "Model for REPL / chat (falls back to env LLM_MODEL).",
     "darwin": "Adaptive signal-weighting (off by default). Set { \"enabled\": true } to turn on; signal-weights.js reads windowDays/minSamples/boostFactor/decayFactor/weightFloor.",
-    "_meta": "Generated template. Defaults mirror config.js (runtime source of truth). Keys here are flat; `darwin` is a nested object. `_help` is ignored by the app. Secrets (wallet, API keys) belong in .env, not here."
+    "_meta": "Generated template. Defaults mirror config-schema.js (single source of truth). Keys are flat; `darwin` is nested. `_help` is ignored by the app. Secrets (wallet, API keys) belong in .env, not here."
   }
 }

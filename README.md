@@ -242,9 +242,7 @@ All fields are optional — defaults shown. Edit `user-config.json` or use `node
 
 | Field | Default | Description |
 |---|---|---|
-| `deployAmountSol` | `0.5` | Base SOL per new position |
-| `positionSizePct` | `0.35` | Fraction of deployable balance to use (compounds with wallet) |
-| `maxDeployAmount` | `50` | Maximum SOL cap per position |
+| `deployAmountSol` | `0.5` | Fixed SOL deployed per new position |
 | `gasReserve` | `0.2` | SOL to keep aside for gas |
 | `minSolToOpen` | `0.55` | Minimum wallet SOL before opening |
 | `maxPositions` | `3` | Maximum concurrent positions |

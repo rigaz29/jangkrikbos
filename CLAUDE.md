@@ -82,10 +82,8 @@ Sets defined in `agent.js:6-7`. If you add a tool, also add it to the relevant s
 | maxTop10Pct | screening | 60 |
 | blockedLaunchpads | screening | [] |
 | deployAmountSol | management | 0.5 |
-| maxDeployAmount | risk | 50 |
 | maxPositions | risk | 3 |
 | gasReserve | management | 0.2 |
-| positionSizePct | management | 0.35 |
 | minSolToOpen | management | 0.55 |
 | outOfRangeWaitMinutes | management | 30 |
 | minAgeBeforeSL | management | 15 |
@@ -93,7 +91,7 @@ Sets defined in `agent.js:6-7`. If you add a tool, also add it to the relevant s
 | screeningIntervalMin | schedule | 30 |
 | managementModel / screeningModel / generalModel | llm | openrouter/healer-alpha |
 
-**`computeDeployAmount(walletSol)`** — scales position size with wallet balance (compounding). Formula: `clamp(deployable × positionSizePct, floor=deployAmountSol, ceil=maxDeployAmount)`.
+**`computeDeployAmount(walletSol)`** — returns a FIXED deploy size = `deployAmountSol` (no wallet-scaling/compounding; `walletSol` is ignored). `positionSizePct` and `maxDeployAmount` were removed.
 
 ---
 

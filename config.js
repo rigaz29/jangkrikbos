@@ -57,26 +57,12 @@ config.llm.screeningModel  = u.screeningModel  ?? process.env.LLM_MODEL ?? DEF.s
 config.llm.generalModel    = u.generalModel    ?? process.env.LLM_MODEL ?? DEF.generalModel;
 
 /**
- * Compute the optimal deploy amount for a given wallet balance.
- * Scales position size with wallet growth (compounding).
- *
- * Formula: clamp(deployable × positionSizePct, floor=deployAmountSol, ceil=maxDeployAmount)
- *
- * Examples (defaults: gasReserve=0.2, positionSizePct=0.35, floor=0.5):
- *   0.8 SOL wallet → 0.6 SOL deploy  (floor)
- *   2.0 SOL wallet → 0.63 SOL deploy
- *   3.0 SOL wallet → 0.98 SOL deploy
- *   4.0 SOL wallet → 1.33 SOL deploy
+ * Deploy amount per position — FIXED at `deployAmountSol`.
+ * No wallet-scaling / compounding: positionSizePct and maxDeployAmount are not used.
+ * `walletSol` is accepted for call-site compatibility but ignored.
  */
 export function computeDeployAmount(walletSol) {
-  const reserve  = config.management.gasReserve      ?? 0.2;
-  const pct      = config.management.positionSizePct ?? 0.35;
-  const floor    = config.management.deployAmountSol;
-  const ceil     = config.risk.maxDeployAmount;
-  const deployable = Math.max(0, walletSol - reserve);
-  const dynamic    = deployable * pct;
-  const result     = Math.min(ceil, Math.max(floor, dynamic));
-  return parseFloat(result.toFixed(2));
+  return parseFloat(Number(config.management.deployAmountSol ?? 0.5).toFixed(2));
 }
 
 /**

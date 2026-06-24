@@ -373,8 +373,8 @@ Changes persist to user-config.json and take effect immediately — no restart n
 
 VALID KEYS (use EXACTLY these key names, nothing else):
 Screening: minFeeActiveTvlRatio, minTvl, maxTvl, minVolume, minOrganic, minHolders, minMcap, maxMcap, minBinStep, maxBinStep, timeframe, category, minTokenFeesSol
-Management: minClaimAmount, outOfRangeBinsToClose, outOfRangeWaitMinutes, stopLossPct, minAgeBeforeSL, minAgeBeforeYieldCheck, pnlSanityMaxDiffPct, takeProfitFeePct, minSolToOpen, deployAmountSol, gasReserve, positionSizePct
-Risk: maxPositions, maxDeployAmount
+Management: minClaimAmount, outOfRangeBinsToClose, outOfRangeWaitMinutes, stopLossPct, minAgeBeforeSL, minAgeBeforeYieldCheck, pnlSanityMaxDiffPct, takeProfitFeePct, minSolToOpen, deployAmountSol, gasReserve
+Risk: maxPositions
 Schedule: managementIntervalMin, screeningIntervalMin, healthCheckIntervalMin
 Models: managementModel, screeningModel, generalModel
 Strategy: targetDownsidePct, targetUpsidePct

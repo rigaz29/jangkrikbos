@@ -14,7 +14,6 @@
 export const CONFIG_SCHEMA = [
   // ─── Risk ───────────────────────────────────────────────────────────────
   { key: "maxPositions",          section: "risk", def: 3,        help: "Max concurrent open LP positions." },
-  { key: "maxDeployAmount",       section: "risk", def: 50,       help: "Hard ceiling on SOL deployed per position." },
 
   // ─── Screening ──────────────────────────────────────────────────────────
   { key: "minFeeActiveTvlRatio",  section: "screening", def: 0.05,     help: "Min fee/active-TVL ratio (%), measured over `timeframe`. Scale this with the timeframe." },
@@ -54,9 +53,8 @@ export const CONFIG_SCHEMA = [
   { key: "minFeePerTvl24h",       section: "management", def: 7,        help: "Min fee/TVL (24h, fixed window) before closing for low yield." },
   { key: "minAgeBeforeYieldCheck", section: "management", def: 60,      help: "Minutes before the low-yield close rule can trigger." },
   { key: "minSolToOpen",          section: "management", def: 0.55,     help: "Min wallet SOL before opening a new position." },
-  { key: "deployAmountSol",       section: "management", def: 0.5,      help: "Base/floor SOL per new position." },
+  { key: "deployAmountSol",       section: "management", def: 0.5,      help: "Fixed SOL deployed per new position." },
   { key: "gasReserve",            section: "management", def: 0.2,      help: "SOL kept aside for gas." },
-  { key: "positionSizePct",       section: "management", def: 0.35,     help: "Fraction of deployable balance to use (compounds with wallet)." },
   { key: "trailingTakeProfit",    section: "management", def: true,     help: "Enable trailing take-profit." },
   { key: "trailingTriggerPct",    section: "management", def: 3,        help: "Activate trailing once PnL reaches this %." },
   { key: "trailingDropPct",       section: "management", def: 1.5,      help: "Close when PnL drops this % from the confirmed peak." },
