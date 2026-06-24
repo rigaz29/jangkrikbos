@@ -13,8 +13,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, "user-config.json");
 const ENV_PATH    = path.join(__dirname, ".env");
 
-const DEFAULT_MODEL = "openai/gpt-oss-20b:free";
-
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
 function ask(question, defaultVal) {
@@ -217,7 +215,7 @@ const maxPositions = await askNum(
 
 const minSolToOpen = await askNum(
   "Min SOL balance to open a new position",
-  e("minSolToOpen", parseFloat((deployAmountSol + 0.05).toFixed(3))),
+  e("minSolToOpen", parseFloat((deployAmountSol + 0.2).toFixed(3))),
   { min: 0.05 }
 );
 
@@ -338,7 +336,7 @@ if (provider.key === "local" || provider.key === "custom") {
 }
 
 const llmApiKeyExisting = e("llmApiKey", existingEnv.LLM_API_KEY || existingEnv.OPENROUTER_API_KEY || "");
-const llmApiKeyRaw = await ask("API Key", llmApiKeyExisting ? "*** (already set)" : (provider.keyHint || ""));
+const llmApiKeyRaw = await ask(`API Key (${provider.keyHint || "your API key"})`, llmApiKeyExisting ? "*** (already set)" : "");
 const llmApiKey   = llmApiKeyRaw.startsWith("***") ? llmApiKeyExisting : llmApiKeyRaw;
 
 const llmModel = await ask(
