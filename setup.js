@@ -113,6 +113,8 @@ const PRESETS = {
   degen: {
     label:                 "Degen",
     timeframe:             "15m",
+    minVolume:             2_000,
+    minFeeActiveTvlRatio:  0.05,
     minOrganic:            60,
     minHolders:            200,
     maxMcap:               5_000_000,
@@ -126,6 +128,8 @@ const PRESETS = {
   moderate: {
     label:                 "Moderate",
     timeframe:             "4h",
+    minVolume:             40_000,
+    minFeeActiveTvlRatio:  0.8,
     minOrganic:            65,
     minHolders:            500,
     maxMcap:               10_000_000,
@@ -139,6 +143,8 @@ const PRESETS = {
   safe: {
     label:                 "Safe",
     timeframe:             "24h",
+    minVolume:             100_000,
+    minFeeActiveTvlRatio:  3,
     minOrganic:            75,
     minHolders:            1000,
     maxMcap:               10_000_000,
@@ -302,6 +308,19 @@ const timeframe = await askEnum(
   TIMEFRAMES
 );
 
+// These two scale with the timeframe above (metrics are measured over that window).
+const minVolume = await askNum(
+  "Min pool volume USD (measured over the timeframe above)",
+  p("minVolume", 500),
+  { min: 0 }
+);
+
+const minFeeActiveTvlRatio = await askNum(
+  "Min fee/active-TVL ratio % (measured over the timeframe above)",
+  p("minFeeActiveTvlRatio", 0.05),
+  { min: 0 }
+);
+
 const minOrganic = await askNum(
   "Min organic score (0–100)",
   p("minOrganic", 65),
@@ -445,6 +464,8 @@ const userConfig = {
   maxPositions,
   minSolToOpen,
   timeframe,
+  minVolume,
+  minFeeActiveTvlRatio,
   minOrganic,
   minHolders,
   maxMcap,
@@ -479,7 +500,8 @@ console.log(`
 
   Deploy:       ${deployAmountSol} SOL/position  ·  max ${maxPositions} positions
   Min balance:  ${minSolToOpen} SOL to open new position
-  Timeframe:    ${timeframe}  ·  organic ≥ ${minOrganic}  ·  holders ≥ ${minHolders}
+  Timeframe:    ${timeframe}  ·  vol ≥ $${minVolume}  ·  fee/aTVL ≥ ${minFeeActiveTvlRatio}%
+  Filters:      organic ≥ ${minOrganic}  ·  holders ≥ ${minHolders}
   Take profit:  fees ≥ ${takeProfitFeePct}%
   Stop loss:    ${stopLossPct}% price drop
   OOR close:    after ${outOfRangeWaitMinutes} min
