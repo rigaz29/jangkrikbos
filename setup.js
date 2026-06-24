@@ -169,6 +169,11 @@ const heliusKey = await ask(
   alreadySet(ev("HELIUS_API_KEY", ""))
 );
 
+const lpAgentKey = await ask(
+  "LPAgent API key (for LP position value/PnL data, optional)",
+  alreadySet(ev("LPAGENT_API_KEY", ""))
+);
+
 // ─── Section 1b: OKX OnchainOS (optional — screening enrichment) ───────────────
 console.log("\n── OKX OnchainOS (optional — token risk + smart-money enrichment) ──");
 console.log("Leave blank to use public endpoints (no key). Add credentials for the");
@@ -381,6 +386,7 @@ const envMap = {
   ...(isKept(walletKey)     ? {} : { WALLET_PRIVATE_KEY: walletKey }),
   ...(rpcUrl                ? { RPC_URL: rpcUrl } : {}),
   ...(isKept(heliusKey)     ? {} : { HELIUS_API_KEY: heliusKey }),
+  ...(isKept(lpAgentKey)    ? {} : { LPAGENT_API_KEY: lpAgentKey }),
   ...(isKept(okxApiKey)     ? {} : { OKX_API_KEY: okxApiKey }),
   ...(isKept(okxSecretKey)  ? {} : { OKX_SECRET_KEY: okxSecretKey }),
   ...(isKept(okxPassphrase) ? {} : { OKX_PASSPHRASE: okxPassphrase }),

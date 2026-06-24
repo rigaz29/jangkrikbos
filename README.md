@@ -72,6 +72,7 @@ WALLET_PRIVATE_KEY=your_base58_private_key
 RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 OPENROUTER_API_KEY=sk-or-...
 HELIUS_API_KEY=your_helius_key              # optional — richer wallet balances
+LPAGENT_API_KEY=your_lpagent_key            # optional — LP position value/PnL data
 OKX_API_KEY=                                # optional — OKX OnchainOS enrichment (higher rate limits)
 OKX_SECRET_KEY=
 OKX_PASSPHRASE=
