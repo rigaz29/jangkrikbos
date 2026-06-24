@@ -153,7 +153,7 @@ export async function getTopCandidates({ limit = 10 } = {}) {
     })
     .slice(0, limit);
 
-  if (config.screening.avoidPvpSymbols && eligible.length > 0) {
+  if (config.screening.avoidPvpSymbols && eligible.length > 0 && typeof enrichPvpRisk === "function") {
     await enrichPvpRisk(eligible);
     if (config.screening.blockPvpSymbols) {
       const before = eligible.length;

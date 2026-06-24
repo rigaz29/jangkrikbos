@@ -44,6 +44,10 @@ export const config = {
     maxBotHoldersPct:  u.maxBotHoldersPct  ?? 30,  // max bot holder addresses % (Jupiter audit)
     maxTop10Pct:       u.maxTop10Pct       ?? 60,  // max top 10 holders concentration
     blockedLaunchpads:  u.blockedLaunchpads  ?? [],  // e.g. ["letsbonk.fun", "pump.fun"]
+    allowedLaunchpads:  u.allowedLaunchpads  ?? [],  // non-empty = only allow these launchpads
+    // NOTE: avoidPvpSymbols/blockPvpSymbols intentionally NOT wired — the PVP code path in
+    // screening.js calls enrichPvpRisk(), which is not implemented. Enabling it would crash
+    // the screening cycle. Wire these only after enrichPvpRisk is implemented.
     minTokenAgeHours:   u.minTokenAgeHours   ?? null, // null = no minimum
     maxTokenAgeHours:   u.maxTokenAgeHours   ?? null, // null = no maximum
     athFilterPct:       u.athFilterPct       ?? null, // e.g. -20 = only deploy if price is >= 20% below ATH
@@ -59,7 +63,6 @@ export const config = {
     outOfRangeWaitMinutes: u.outOfRangeWaitMinutes ?? 30,
     oorCooldownTriggerCount: u.oorCooldownTriggerCount ?? 3,
     oorCooldownHours:       u.oorCooldownHours       ?? 12,
-    minVolumeToRebalance:  u.minVolumeToRebalance  ?? 1000,
     stopLossPct:           u.stopLossPct           ?? u.emergencyPriceDropPct ?? -20,
     minAgeBeforeSL:        u.minAgeBeforeSL        ?? 15,  // minutes before stop loss can trigger
     takeProfitFeePct:      u.takeProfitFeePct      ?? 5,
@@ -101,6 +104,11 @@ export const config = {
     screeningModel:  u.screeningModel  ?? process.env.LLM_MODEL ?? "openrouter/hunter-alpha",
     generalModel:    u.generalModel    ?? process.env.LLM_MODEL ?? "openrouter/healer-alpha",
   },
+
+  // ─── Darwin (adaptive signal weights) ──
+  // Off by default. Enable in user-config.json: { "darwin": { "enabled": true } }
+  // signal-weights.js reads windowDays/minSamples/boostFactor/decayFactor/weightFloor (with its own defaults).
+  darwin: u.darwin ?? { enabled: false },
 
   // ─── Common Token Mints ────────────────
   tokens: {

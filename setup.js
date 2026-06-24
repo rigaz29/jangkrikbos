@@ -419,5 +419,5 @@ console.log(`
   Config:       ${CONFIG_PATH}
 
 Run "npm start" to launch the agent.
-${dryRun ? '\n  ⚠ DRY RUN is ON — set dryRun: false in user-config.json when ready for live trading.\n' : ""}
+${dryRun ? '\n  ⚠ DRY RUN is ON — set DRY_RUN=false in .env (or re-run npm run setup) when ready for live trading.\n    Note: .env takes precedence over user-config.json for DRY_RUN.\n' : ""}
 `);
