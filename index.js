@@ -19,9 +19,8 @@ import { getTokenNarrative, getTokenInfo } from "./tools/token.js";
 
 log("startup", "DLMM LP Agent starting...");
 log("startup", `Mode: ${process.env.DRY_RUN === "true" ? "DRY RUN" : "LIVE"}`);
-log("startup", `Model: ${process.env.LLM_MODEL || "hermes-3-405b"}`);
+log("startup", `Model: ${process.env.LLM_MODEL || "openrouter/healer-alpha"}`);
 
-const TP_PCT = config.management.takeProfitFeePct;
 const DEPLOY = config.management.deployAmountSol;
 
 // ═══════════════════════════════════════════
@@ -310,7 +309,7 @@ export async function runManagementCycle({ silent = false } = {}) {
       // Rule 5: fee yield too low
       if (p.fee_per_tvl_24h != null &&
           p.fee_per_tvl_24h < config.management.minFeePerTvl24h &&
-          (p.age_minutes ?? 0) >= 60) {
+          (p.age_minutes ?? 0) >= (config.management.minAgeBeforeYieldCheck ?? 60)) {
         actionMap.set(p.position, { action: "CLOSE", rule: 5, reason: "low yield" });
         continue;
       }
@@ -683,7 +682,10 @@ export function startCronJobs() {
 
   const screenTask = cron.schedule(`*/${Math.max(1, config.schedule.screeningIntervalMin)} * * * *`, runScreeningCycle);
 
-  const healthTask = cron.schedule(`0 * * * *`, async () => {
+  // Honor healthCheckIntervalMin: >=60 (or unset) → hourly at minute 0; otherwise every N minutes
+  const hcMin = config.schedule.healthCheckIntervalMin ?? 60;
+  const healthCron = hcMin >= 60 ? `0 * * * *` : `*/${Math.max(1, hcMin)} * * * *`;
+  const healthTask = cron.schedule(healthCron, async () => {
     if (_managementBusy) return;
     _managementBusy = true;
     log("cron", "Starting health check");
