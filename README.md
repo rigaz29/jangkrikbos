@@ -29,7 +29,7 @@ A lightweight 30-second poller updates trailing take-profit and stop-loss state 
 **Data sources:**
 - `@meteora-ag/dlmm` SDK — on-chain position data, active bin, deploy/close transactions
 - Meteora DLMM PnL API — position yield, fee accrual, PnL
-- OKX OnchainOS — smart-money signals, token risk scoring
+- OKX OnchainOS — smart-money signals, token risk scoring (public by default; optional API key for higher rate limits)
 - Pool discovery API — fee/TVL ratios, volume, organic scores, holders
 - Jupiter API — token audit, mcap, launchpad, price stats
 
@@ -63,7 +63,7 @@ npm install
 npm run setup
 ```
 
-The wizard creates `.env` (API keys, wallet, RPC, Telegram) and `user-config.json` (risk preset, deploy size, thresholds, model). Takes about two minutes. Press Enter at any prompt to keep the default.
+The wizard creates `.env` (API keys, wallet, RPC, OKX, Telegram) and `user-config.json` (risk preset, deploy size, thresholds, model). Takes about two minutes. Press Enter at any prompt to keep the default.
 
 **Or configure manually.** Create `.env`:
 
@@ -72,6 +72,10 @@ WALLET_PRIVATE_KEY=your_base58_private_key
 RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 OPENROUTER_API_KEY=sk-or-...
 HELIUS_API_KEY=your_helius_key              # optional — richer wallet balances
+OKX_API_KEY=                                # optional — OKX OnchainOS enrichment (higher rate limits)
+OKX_SECRET_KEY=
+OKX_PASSPHRASE=
+OKX_PROJECT_ID=                             # OK-ACCESS-PROJECT — required only for OnchainOS APIs
 TELEGRAM_BOT_TOKEN=123456:ABC...            # optional — notifications + chat
 TELEGRAM_CHAT_ID=                           # required to enable Telegram control
 TELEGRAM_ALLOWED_USER_IDS=                  # comma-separated user ids allowed to issue commands
@@ -81,6 +85,8 @@ DRY_RUN=true                                # set false for live trading
 > Keep private keys and API keys in `.env` only — never in `user-config.json`. Both files are gitignored.
 >
 > `.env` takes precedence over `user-config.json` for `DRY_RUN`. To go live, set `DRY_RUN=false` in `.env` (or re-run `npm run setup`).
+>
+> **OKX enrichment is optional.** Screening uses OKX's public endpoints by default (no key). Add `OKX_API_KEY` / `OKX_SECRET_KEY` / `OKX_PASSPHRASE` / `OKX_PROJECT_ID` for the authenticated OnchainOS API (higher rate limits) — create a project and key at the [OKX developer portal](https://web3.okx.com/onchainos/dev-docs/home/developer-portal). The setup wizard prompts for these too.
 
 Then copy and edit the config:
 

@@ -169,6 +169,32 @@ const heliusKey = await ask(
   alreadySet(ev("HELIUS_API_KEY", ""))
 );
 
+// ─── Section 1b: OKX OnchainOS (optional — screening enrichment) ───────────────
+console.log("\n── OKX OnchainOS (optional — token risk + smart-money enrichment) ──");
+console.log("Leave blank to use public endpoints (no key). Add credentials for the");
+console.log("authenticated OnchainOS API (higher rate limits). Create a project + key at");
+console.log("https://web3.okx.com/onchainos/dev-docs/home/developer-portal\n");
+
+const okxApiKey = await ask(
+  "OKX API key",
+  alreadySet(ev("OKX_API_KEY", ""))
+);
+
+const okxSecretKey = await ask(
+  "OKX secret key",
+  alreadySet(ev("OKX_SECRET_KEY", ""))
+);
+
+const okxPassphrase = await ask(
+  "OKX passphrase",
+  alreadySet(ev("OKX_PASSPHRASE", ""))
+);
+
+const okxProjectId = await ask(
+  "OKX project ID (OnchainOS — required for OnchainOS APIs)",
+  ev("OKX_PROJECT_ID", "")
+);
+
 // ─── Section 2: Telegram ──────────────────────────────────────────────────────
 console.log("\n── Telegram (optional — skip to disable) ─────────────────────");
 
@@ -355,6 +381,10 @@ const envMap = {
   ...(isKept(walletKey)     ? {} : { WALLET_PRIVATE_KEY: walletKey }),
   ...(rpcUrl                ? { RPC_URL: rpcUrl } : {}),
   ...(isKept(heliusKey)     ? {} : { HELIUS_API_KEY: heliusKey }),
+  ...(isKept(okxApiKey)     ? {} : { OKX_API_KEY: okxApiKey }),
+  ...(isKept(okxSecretKey)  ? {} : { OKX_SECRET_KEY: okxSecretKey }),
+  ...(isKept(okxPassphrase) ? {} : { OKX_PASSPHRASE: okxPassphrase }),
+  ...(okxProjectId          ? { OKX_PROJECT_ID: okxProjectId } : {}),
   ...(isKept(telegramToken) ? {} : { TELEGRAM_BOT_TOKEN: telegramToken }),
   ...(telegramChatId        ? { TELEGRAM_CHAT_ID: telegramChatId } : {}),
   DRY_RUN: dryRun ? "true" : "false",
@@ -414,6 +444,7 @@ console.log(`
   Model:        ${llmModel}
   Base URL:     ${llmBaseUrl}
 
+  OKX:          ${envMap.OKX_API_KEY && envMap.OKX_SECRET_KEY && envMap.OKX_PASSPHRASE ? "authenticated OnchainOS API" : "public endpoints (no key)"}
   Telegram:     ${telegramToken ? "enabled" : "disabled"}
   .env:         ${ENV_PATH}
   Config:       ${CONFIG_PATH}
