@@ -227,8 +227,8 @@ const actualBaseFee = baseFactor > 0
 `lessons.js` records closed position performance and auto-derives lessons. Key points:
 - `getLessonsForPrompt({ agentType })` — injects relevant lessons into system prompt
 - `evolveThresholds()` — adjusts screening thresholds based on winners vs losers
-- Performance recorded via `recordPerformance()` called from executor.js after `close_position`
-- **Known issue**: `evolveThresholds()` references `maxVolatility` and `minFeeTvlRatio` but config.js uses `minFeeActiveTvlRatio` and has no `maxVolatility` key — the evolution of these keys is a no-op
+- Performance recorded via `recordPerformance()` called from `closePosition()` in `tools/dlmm.js` after a confirmed close
+- `evolveThresholds()` evolves `maxVolatility`, `minFeeActiveTvlRatio`, `minOrganic`, `minTvl`, and `maxPriceVolatility`. `maxVolatility` is a real `config.screening` key (default 10) and is also enforced as a hard screening filter in `getTopCandidates()` (drops pools with `volatility > maxVolatility`).
 
 ---
 

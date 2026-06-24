@@ -144,6 +144,11 @@ export async function getTopCandidates({ limit = 10 } = {}) {
         pushFilteredReason(filteredOut, p, "token cooldown active");
         return false;
       }
+      if (config.screening.maxVolatility != null && p.volatility != null && p.volatility > config.screening.maxVolatility) {
+        log("screening", `Filtered high-volatility pool ${p.name} — volatility ${p.volatility} > max ${config.screening.maxVolatility}`);
+        pushFilteredReason(filteredOut, p, `volatility ${p.volatility} > max ${config.screening.maxVolatility}`);
+        return false;
+      }
       return true;
     })
     .slice(0, limit);

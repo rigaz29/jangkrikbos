@@ -48,6 +48,7 @@ export const config = {
     maxTokenAgeHours:   u.maxTokenAgeHours   ?? null, // null = no maximum
     athFilterPct:       u.athFilterPct       ?? null, // e.g. -20 = only deploy if price is >= 20% below ATH
     maxPriceVolatility: u.maxPriceVolatility ?? 50,   // max % price swing during position (auto-evolved)
+    maxVolatility:      u.maxVolatility      ?? 10,   // max pool volatility at screening time (~0-5 typical, 5+ = high). Hard filter + auto-evolved.
   },
 
   // ─── Position Management ────────────────
@@ -160,6 +161,7 @@ export function reloadScreeningThresholds() {
     if (fresh.maxBundlePct      != null) s.maxBundlePct     = fresh.maxBundlePct;
     if (fresh.maxBotHoldersPct  != null) s.maxBotHoldersPct = fresh.maxBotHoldersPct;
     if (fresh.maxPriceVolatility != null) s.maxPriceVolatility = fresh.maxPriceVolatility;
+    if (fresh.maxVolatility      != null) s.maxVolatility      = fresh.maxVolatility;
   } catch (err) {
     log("config_error", `Failed to reload screening thresholds: ${err.message}`);
   }
