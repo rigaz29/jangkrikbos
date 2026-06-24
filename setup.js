@@ -8,6 +8,7 @@ import readline from "readline";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { CONFIG_SCHEMA } from "./config-schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, "user-config.json");
@@ -456,24 +457,32 @@ const rawEnv = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, "utf8") : "";
 fs.writeFileSync(ENV_PATH, upsertEnv(rawEnv, envUpdates));
 
 // ─── Write user-config.json ────────────────────────────────────────────────────
+// Write EVERY config key so no default is hidden. Precedence per key:
+// wizard prompt > existing user-config.json value > schema default.
+// The three role-models default to the chosen llmModel unless already overridden.
+const promptOverrides = {
+  deployAmountSol, maxPositions, minSolToOpen, timeframe, minVolume,
+  minFeeActiveTvlRatio, minOrganic, minHolders, maxMcap, takeProfitFeePct,
+  stopLossPct, outOfRangeWaitMinutes, managementIntervalMin, screeningIntervalMin,
+  managementModel: existingConfig.managementModel ?? llmModel,
+  screeningModel:  existingConfig.screeningModel  ?? llmModel,
+  generalModel:    existingConfig.generalModel    ?? llmModel,
+};
+
+const fullConfig = {};
+for (const { key, def } of CONFIG_SCHEMA) {
+  if (promptOverrides[key] !== undefined)            fullConfig[key] = promptOverrides[key];
+  else if (existingConfig[key] !== undefined)        fullConfig[key] = existingConfig[key];
+  else                                               fullConfig[key] = def;
+}
+
+const _help = Object.fromEntries(CONFIG_SCHEMA.map(({ key, help }) => [key, help]));
+
 const userConfig = {
-  ...existingConfig,
+  ...existingConfig,            // preserve extra keys (walletKey, llmApiKey, hiveMind*, etc.)
+  ...fullConfig,               // every config.js key at its effective value
   preset: presetChoice.key,
   rpcUrl,
-  deployAmountSol,
-  maxPositions,
-  minSolToOpen,
-  timeframe,
-  minVolume,
-  minFeeActiveTvlRatio,
-  minOrganic,
-  minHolders,
-  maxMcap,
-  takeProfitFeePct,
-  stopLossPct,
-  outOfRangeWaitMinutes,
-  managementIntervalMin,
-  screeningIntervalMin,
   llmProvider: provider.key,
   llmBaseUrl,
   llmModel,
@@ -482,8 +491,9 @@ const userConfig = {
   dryRun,
 };
 
-// Remove legacy key if present
-delete userConfig.emergencyPriceDropPct;
+delete userConfig.emergencyPriceDropPct; // drop legacy key
+delete userConfig._help;                 // regenerate so the help block sorts last
+userConfig._help = _help;
 
 fs.writeFileSync(CONFIG_PATH, JSON.stringify(userConfig, null, 2));
 

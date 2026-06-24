@@ -63,7 +63,7 @@ npm install
 npm run setup
 ```
 
-The wizard creates `.env` (API keys, wallet, RPC, OKX, Telegram) and `user-config.json` (risk preset, deploy size, thresholds, model). Takes about two minutes. Press Enter at any prompt to keep the default.
+The wizard creates `.env` (API keys, wallet, RPC, OKX, Telegram) and `user-config.json`. Takes about two minutes. Press Enter at any prompt to keep the default. `user-config.json` is written with **every** config key (so no default is hidden) plus a `_help` block explaining each one — the app ignores `_help`.
 
 **Or configure manually.** Create `.env`:
 
