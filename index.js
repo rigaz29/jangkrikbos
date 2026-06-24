@@ -602,7 +602,7 @@ ${candidateBlocks.join("\n\n")}
 STEPS:
 1. Pick the best candidate based on narrative quality, smart wallets, and pool metrics.
 2. Call deploy_position (active_bin is pre-fetched above — no need to call get_active_bin).
-   Choose strategy (bid_ask or spot) based on token signals. Bins are auto-calculated — pass only strategy and bin_step.
+   Pass the candidate's volatility and bin_step. Strategy (bid_ask/spot) is auto-decided from volatility — you do not pick it. Bins are auto-calculated.
 3. Report in this exact format (no tables, no extra sections):
    🚀 DEPLOYED
 

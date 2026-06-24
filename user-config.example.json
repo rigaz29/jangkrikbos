@@ -42,6 +42,7 @@
   "pnlSanityMaxDiffPct": 5,
   "solMode": false,
   "strategy": "bid_ask",
+  "volatilityStrategyThreshold": 2.5,
   "targetDownsidePct": 0.35,
   "targetUpsidePct": 0.2,
   "managementIntervalMin": 10,
@@ -109,7 +110,8 @@
     "trailingDropPct": "Close when PnL drops this % from the confirmed peak.",
     "pnlSanityMaxDiffPct": "Max diff between reported and derived PnL % before ignoring a tick.",
     "solMode": "Report positions/PnL/balances in SOL instead of USD.",
-    "strategy": "Default LP strategy when signals are unclear: bid_ask|spot|curve.",
+    "strategy": "Fallback LP strategy when volatility isn't provided (manual deploys): bid_ask|spot.",
+    "volatilityStrategyThreshold": "Pool volatility >= this => bid_ask (high-vol, OOR-resilient, accumulate dips); below => spot (two-sided fee farming). Drives strategy deterministically on autonomous deploys.",
     "targetDownsidePct": "Bin range covers this % price drop below the active bin.",
     "targetUpsidePct": "Bin range covers this % price rise above the active bin (spot only).",
     "managementIntervalMin": "Management cycle frequency (minutes).",
@@ -122,6 +124,6 @@
     "screeningModel": "Model for screening cycles (falls back to env LLM_MODEL).",
     "generalModel": "Model for REPL / chat (falls back to env LLM_MODEL).",
     "darwin": "Adaptive signal-weighting (off by default). Set { \"enabled\": true } to turn on; signal-weights.js reads windowDays/minSamples/boostFactor/decayFactor/weightFloor.",
-    "_meta": "Generated template. Defaults mirror config-schema.js (single source of truth). Keys are flat; `darwin` is nested. `_help` is ignored by the app. Secrets (wallet, API keys) belong in .env, not here."
+    "_meta": "Generated template. Defaults mirror config-schema.js (single source of truth). Keys are flat; darwin is nested. _help is ignored by the app. Secrets belong in .env."
   }
 }

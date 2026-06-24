@@ -61,7 +61,8 @@ export const CONFIG_SCHEMA = [
   { key: "solMode",               section: "management", def: false,    help: "Report positions/PnL/balances in SOL instead of USD." },
 
   // ─── Strategy ───────────────────────────────────────────────────────────
-  { key: "strategy",              section: "strategy", def: "bid_ask", help: "Default LP strategy when signals are unclear: bid_ask|spot|curve." },
+  { key: "strategy",              section: "strategy", def: "bid_ask", help: "Fallback LP strategy when volatility isn't provided (manual deploys): bid_ask|spot." },
+  { key: "volatilityStrategyThreshold", section: "strategy", def: 2.5, help: "Pool volatility >= this => bid_ask (high-vol, OOR-resilient, accumulate dips); below => spot (two-sided fee farming). Drives strategy deterministically on autonomous deploys." },
   { key: "targetDownsidePct",     section: "strategy", def: 0.35,     help: "Bin range covers this % price drop below the active bin." },
   { key: "targetUpsidePct",       section: "strategy", def: 0.20,     help: "Bin range covers this % price rise above the active bin (spot only)." },
 

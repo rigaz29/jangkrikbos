@@ -135,7 +135,7 @@ HARD RULES:
 - Bin Step: Only deploy in pools with bin_step between 80 and 125.
 
 Guidelines (only when user hasn't specified):
-- Strategy: choose bid_ask (momentum/directional) or spot (range-bound/fee farming) based on signals
+- Strategy: auto-decided from pool volatility (>= threshold => bid_ask, else spot). Pass volatility; you don't pick the shape
 - Bins: auto-calculated from config.strategy.targetDownsidePct / targetUpsidePct — omit bins_below/bins_above unless overriding
 - Deposit: Can be single-sided (SOL only or Base only) or dual-sided.
 
@@ -162,7 +162,7 @@ WARNING: This executes a real on-chain transaction. Check DRY_RUN mode.`,
           strategy: {
             type: "string",
             enum: ["bid_ask", "spot"],
-            description: "DLMM strategy type. If user specifies, use exactly what they said. Otherwise use the active strategy's lp_strategy field."
+            description: "DLMM strategy. Optional — when `volatility` is provided it OVERRIDES this (>= volatilityStrategyThreshold => bid_ask, else spot). An explicit choice is honored only on manual deploys that don't pass volatility."
           },
           bins_below: {
             type: "number",
@@ -377,7 +377,7 @@ Management: minClaimAmount, outOfRangeBinsToClose, outOfRangeWaitMinutes, stopLo
 Risk: maxPositions
 Schedule: managementIntervalMin, screeningIntervalMin, healthCheckIntervalMin
 Models: managementModel, screeningModel, generalModel
-Strategy: targetDownsidePct, targetUpsidePct
+Strategy: targetDownsidePct, targetUpsidePct, volatilityStrategyThreshold
 
 Reason is optional but helpful — logged as a lesson when provided.`,
       parameters: {

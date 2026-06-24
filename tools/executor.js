@@ -194,6 +194,7 @@ const toolMap = {
       // strategy
       targetDownsidePct: ["strategy", "targetDownsidePct"],
       targetUpsidePct:   ["strategy", "targetUpsidePct"],
+      volatilityStrategyThreshold: ["strategy", "volatilityStrategyThreshold"],
     };
 
     const applied = {};

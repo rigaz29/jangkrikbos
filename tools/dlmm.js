@@ -123,7 +123,22 @@ export async function deployPosition({
   initial_value_usd,
 }) {
   pool_address = normalizeMint(pool_address);
-  const activeStrategy = strategy || config.strategy.strategy;
+
+  // Strategy is driven primarily by pool volatility (deterministic guardrail):
+  //   volatility >= threshold → bid_ask (high-vol: wide, SOL-side, OOR-resilient, accumulate dips)
+  //   volatility <  threshold → spot    (calmer: two-sided fee farming)
+  // When volatility isn't provided (manual CLI/chat deploy), honor the explicit
+  // strategy or the config fallback. Curve is never auto-selected.
+  const volThreshold = config.strategy.volatilityStrategyThreshold ?? 2.5;
+  let activeStrategy;
+  if (volatility != null && Number.isFinite(Number(volatility))) {
+    activeStrategy = Number(volatility) >= volThreshold ? "bid_ask" : "spot";
+    if (strategy && strategy !== activeStrategy) {
+      log("deploy", `Strategy set by volatility: requested ${strategy} → ${activeStrategy} (volatility ${volatility} vs threshold ${volThreshold})`);
+    }
+  } else {
+    activeStrategy = strategy || config.strategy.strategy;
+  }
 
   const targetDownside = config.strategy.targetDownsidePct ?? 0.35;
   const targetUpside   = config.strategy.targetUpsidePct   ?? 0.20;
