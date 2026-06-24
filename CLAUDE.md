@@ -226,7 +226,7 @@ const actualBaseFee = baseFactor > 0
 - `getLessonsForPrompt({ agentType })` — injects relevant lessons into system prompt
 - `evolveThresholds()` — adjusts screening thresholds based on winners vs losers
 - Performance recorded via `recordPerformance()` called from `closePosition()` in `tools/dlmm.js` after a confirmed close
-- `evolveThresholds()` evolves `maxVolatility`, `minFeeActiveTvlRatio`, `minOrganic`, `minTvl`, and `maxPriceVolatility`. `maxVolatility` is a real `config.screening` key (default 10) and is also enforced as a hard screening filter in `getTopCandidates()` (drops pools with `volatility > maxVolatility`).
+- `evolveThresholds()` evolves `maxVolatility`, `minFeeActiveTvlRatio`, `minOrganic`, and `minTvl`. `maxVolatility` is a real `config.screening` key (default 10) and is also enforced as a hard screening filter in `getTopCandidates()` (drops pools with `volatility > maxVolatility`).
 
 ---
 

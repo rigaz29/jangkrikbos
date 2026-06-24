@@ -37,7 +37,6 @@ export const CONFIG_SCHEMA = [
   { key: "minTokenAgeHours",      section: "screening", def: null,     help: "Min token age in hours (null = no minimum)." },
   { key: "maxTokenAgeHours",      section: "screening", def: null,     help: "Max token age in hours (null = no maximum)." },
   { key: "athFilterPct",          section: "screening", def: null,     help: "Only deploy if price is >= this % below ATH, e.g. -20 (null = off)." },
-  { key: "maxPriceVolatility",    section: "screening", def: 50,       help: "Max % price swing during a position (learning metric, auto-evolved)." },
   { key: "maxVolatility",         section: "screening", def: 10,       help: "Max pool volatility at screening time (~0-5 typical, 5+ high). Hard filter + auto-evolved." },
 
   // ─── Management ─────────────────────────────────────────────────────────
