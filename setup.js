@@ -149,10 +149,8 @@ console.log("── API Keys & Wallet ──────────────
 
 const alreadySet = (val) => val ? "*** (already set — Enter to keep)" : "";
 
-const openrouterKey = await ask(
-  "OpenRouter API key (sk-or-...)",
-  alreadySet(ev("OPENROUTER_API_KEY", ""))
-);
+// LLM provider API key is collected in Section 8 (handles OpenRouter and all
+// other providers) — no separate OpenRouter prompt here to avoid asking twice.
 
 const walletKey = await ask(
   "Wallet private key (base58)",
@@ -382,7 +380,6 @@ const isKept = (val) => !val || val.startsWith("***");
 
 const envMap = {
   ...existingEnv,
-  ...(isKept(openrouterKey) ? {} : { OPENROUTER_API_KEY: openrouterKey }),
   ...(isKept(walletKey)     ? {} : { WALLET_PRIVATE_KEY: walletKey }),
   ...(rpcUrl                ? { RPC_URL: rpcUrl } : {}),
   ...(isKept(heliusKey)     ? {} : { HELIUS_API_KEY: heliusKey }),
