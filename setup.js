@@ -456,6 +456,9 @@ const envUpdates = {
 const rawEnv = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, "utf8") : "";
 fs.writeFileSync(ENV_PATH, upsertEnv(rawEnv, envUpdates));
 
+// Effective env (existing + this run's updates) — for the summary below.
+const finalEnv = { ...existingEnv, ...envUpdates };
+
 // ─── Write user-config.json ────────────────────────────────────────────────────
 // Write EVERY config key so no default is hidden. Precedence per key:
 // wizard prompt > existing user-config.json value > schema default.
@@ -521,7 +524,7 @@ console.log(`
   Model:        ${llmModel}
   Base URL:     ${llmBaseUrl}
 
-  OKX:          ${envMap.OKX_API_KEY && envMap.OKX_SECRET_KEY && envMap.OKX_PASSPHRASE ? "authenticated OnchainOS API" : "public endpoints (no key)"}
+  OKX:          ${finalEnv.OKX_API_KEY && finalEnv.OKX_SECRET_KEY && finalEnv.OKX_PASSPHRASE ? "authenticated OnchainOS API" : "public endpoints (no key)"}
   Telegram:     ${telegramToken ? "enabled" : "disabled"}
   .env:         ${ENV_PATH}
   Config:       ${CONFIG_PATH}
