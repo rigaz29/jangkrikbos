@@ -299,13 +299,25 @@ export async function createLiveMessage(title, intro = "Starting...") {
 
 // ─── Long polling ────────────────────────────────────────────────
 async function poll(onMessage) {
+  let failureStreak = 0; // backoff + log-throttle for transient outages
+  const backoff = () => sleep(Math.min(5000 * Math.max(1, failureStreak), 30_000));
+
   while (_polling) {
     try {
       const res = await fetch(
         `${BASE}/getUpdates?offset=${_offset}&timeout=30`,
         { signal: AbortSignal.timeout(35_000) }
       );
-      if (!res.ok) { await sleep(5000); continue; }
+      if (!res.ok) {
+        failureStreak++;
+        if (failureStreak === 1) log("telegram_warn", `getUpdates HTTP ${res.status} — retrying with backoff`);
+        await backoff();
+        continue;
+      }
+      if (failureStreak > 0) {
+        log("telegram", `Polling recovered after ${failureStreak} failed attempt(s)`);
+        failureStreak = 0;
+      }
       const data = await res.json();
       for (const update of data.result || []) {
         _offset = update.update_id + 1;
@@ -315,10 +327,16 @@ async function poll(onMessage) {
         await onMessage(msg);
       }
     } catch (e) {
-      if (!e.message?.includes("aborted")) {
-        log("telegram_error", `Poll error: ${e.message}`);
+      // The long-poll abort (35s safety net) is normal when Telegram has no
+      // updates — re-poll immediately without treating it as a failure.
+      if (e.name === "TimeoutError" || e.message?.includes("aborted")) {
+        continue;
       }
-      await sleep(5000);
+      // Transient network failure ("fetch failed", ECONNRESET, …). Self-recovers;
+      // log only the first of a streak to avoid spam, then back off.
+      failureStreak++;
+      if (failureStreak === 1) log("telegram_warn", `Poll network error: ${e.message} — retrying with backoff`);
+      await backoff();
     }
   }
 }
