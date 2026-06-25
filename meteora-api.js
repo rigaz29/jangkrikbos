@@ -37,6 +37,13 @@ async function fetchWithRetry(url, retries = MAX_RETRIES) {
       }
 
       if (!res.ok) {
+        // 4xx (e.g. 404 for positions with no events) are permanent — retrying
+        // can't change them. Degrade gracefully without burning retries/log spam.
+        if (res.status >= 400 && res.status < 500) {
+          log("meteora_api", `HTTP ${res.status} for ${url} — not retrying (client error)`);
+          return null;
+        }
+        // 5xx / transient — fall through to the retry path.
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
