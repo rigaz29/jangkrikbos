@@ -26,9 +26,11 @@ function getWallet() {
 }
 
 const JUPITER_API_KEY = process.env.JUPITER_API_KEY || "";
-// No key → free public tier (lite-api.jup.ag, no auth). Setting JUPITER_API_KEY
-// switches to the paid host (api.jup.ag) which REQUIRES the key (else 401).
-const JUPITER_HOST = JUPITER_API_KEY ? "https://api.jup.ag" : "https://lite-api.jup.ag";
+// Always api.jup.ag. Keyless requests work at 0.5 RPS; setting JUPITER_API_KEY
+// raises the plan rate. lite-api.jup.ag is being retired (Jupiter portal
+// migration), so we no longer depend on it. jupHeaders() sends the x-api-key
+// header only when a key is configured (omitting it = keyless).
+const JUPITER_HOST = "https://api.jup.ag";
 const JUPITER_PRICE_API = `${JUPITER_HOST}/price/v3`;
 const JUPITER_ULTRA_API = `${JUPITER_HOST}/ultra/v1`;
 const JUPITER_QUOTE_API = `${JUPITER_HOST}/swap/v1`;
@@ -352,7 +354,9 @@ export async function sweepStrandedTokens({ keepMints = [], minUsd = 0.10 } = {}
     const res = await autoSwapToSol(t.mint, { minUsd, token: t });
     if (res.swapped) swept.push({ mint: t.mint, symbol: sym, usd: t.usd, amountOut: res.amountOut });
     else failed.push({ mint: t.mint, symbol: sym, usd: t.usd, error: res.error || res.reason });
-    await new Promise((r) => setTimeout(r, 400)); // pace swaps to avoid rate limits
+    // Pace swaps: keyless Jupiter is 0.5 RPS, so leave ~2s between swaps; a key
+    // raises the limit, so 400ms is plenty.
+    await new Promise((r) => setTimeout(r, JUPITER_API_KEY ? 400 : 2100));
   }
   if (swept.length || failed.length) {
     log("sweep", `Sweep done: ${swept.length} swept, ${failed.length} failed of ${candidates.length} candidate(s)`);
