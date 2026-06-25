@@ -8,7 +8,7 @@ import { getWalletBalances } from "./tools/wallet.js";
 import { getTopCandidates } from "./tools/screening.js";
 import { config, reloadScreeningThresholds, computeDeployAmount } from "./config.js";
 import { evolveThresholds, getPerformanceSummary, bootstrapFromHistory } from "./lessons.js";
-import { registerCronRestarter } from "./tools/executor.js";
+import { registerCronRestarter, executeTool } from "./tools/executor.js";
 import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, isEnabled as telegramEnabled, createLiveMessage } from "./telegram.js";
 import { generateBriefing } from "./briefing.js";
 import { getLastBriefingDate, setLastBriefingDate, getTrackedPosition, setPositionInstruction, setPendingCloseReason, updatePnlAndCheckExits, queuePeakConfirmation, resolvePendingPeak, queueTrailingDropConfirmation, resolvePendingTrailingDrop, queueStopLossConfirmation, resolvePendingStopLoss } from "./state.js";
@@ -1042,6 +1042,8 @@ Commands:
   /learn <addr>  Study top LPers from a specific pool address
   /thresholds    Show current screening thresholds + performance stats
   /evolve        Manually trigger threshold evolution from performance data
+  /evolve on|off Enable/disable AUTO evolution (every 5 closed positions; off by default)
+  /evolve status Show whether auto-evolve is on or off
   /bootstrap     Import last 10 closed positions from Meteora API and learn from them
   /stop          Shut down
 `);
@@ -1204,7 +1206,22 @@ Focus on: hold duration, entry/exit timing, what win rates look like, whether sc
       return;
     }
 
-    if (input === "/evolve") {
+    if (input === "/evolve" || input.startsWith("/evolve ")) {
+      const evolveArg = input.slice("/evolve".length).trim().toLowerCase();
+      if (evolveArg === "on" || evolveArg === "off") {
+        const enabled = evolveArg === "on";
+        await executeTool("update_config", { changes: { autoEvolve: enabled }, reason: "manual /evolve toggle" });
+        console.log(`\nAuto-evolve is now ${enabled ? "ON" : "OFF"}.${enabled ? "" : " Manual /evolve still works."}\n`);
+        return;
+      }
+      if (evolveArg === "status") {
+        console.log(`\nAuto-evolve: ${config.management.autoEvolve ? "ON" : "OFF"}\n`);
+        return;
+      }
+      if (evolveArg && evolveArg !== "now") {
+        console.log(`\nUnknown option "${evolveArg}". Use: /evolve [now] | /evolve on | /evolve off | /evolve status\n`);
+        return;
+      }
       await runBusy(async () => {
         const perf = getPerformanceSummary();
         if (!perf || perf.total_positions_closed < 5) {

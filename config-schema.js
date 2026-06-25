@@ -59,6 +59,7 @@ export const CONFIG_SCHEMA = [
   { key: "trailingDropPct",       section: "management", def: 1.5,      help: "Close when PnL drops this % from the confirmed peak." },
   { key: "pnlSanityMaxDiffPct",   section: "management", def: 5,        help: "Max diff between reported and derived PnL % before ignoring a tick." },
   { key: "solMode",               section: "management", def: false,    help: "Report positions/PnL/balances in SOL instead of USD." },
+  { key: "autoEvolve",            section: "management", def: false,    help: "Auto-evolve screening thresholds every 5 closed positions. Off by default — run /evolve to evolve manually." },
 
   // ─── Strategy ───────────────────────────────────────────────────────────
   { key: "strategy",              section: "strategy", def: "bid_ask", help: "Fallback LP strategy when volatility isn't provided (manual deploys): bid_ask|spot." },

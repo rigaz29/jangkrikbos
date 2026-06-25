@@ -107,13 +107,17 @@ export async function recordPerformance(perf) {
     });
   }
 
-  // Evolve thresholds every 5 closed positions
+  // Evolve thresholds every 5 closed positions — only when auto-evolve is enabled
   if (data.totalClosed % MIN_EVOLVE_POSITIONS === 0) {
     const { config, reloadScreeningThresholds } = await import("./config.js");
-    const result = evolveThresholds(data.performance, config);
-    if (result?.changes && Object.keys(result.changes).length > 0) {
-      reloadScreeningThresholds();
-      log("evolve", `Auto-evolved thresholds: ${JSON.stringify(result.changes)}`);
+    if (config.management.autoEvolve) {
+      const result = evolveThresholds(data.performance, config);
+      if (result?.changes && Object.keys(result.changes).length > 0) {
+        reloadScreeningThresholds();
+        log("evolve", `Auto-evolved thresholds: ${JSON.stringify(result.changes)}`);
+      }
+    } else {
+      log("evolve", `Auto-evolve OFF — skipped threshold evolution at ${data.totalClosed} closed (run /evolve to evolve manually)`);
     }
     if (config.darwin?.enabled) {
       const { recalculateWeights } = await import("./signal-weights.js");
