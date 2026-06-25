@@ -346,8 +346,23 @@ let _positionsCacheAt = 0;
 let _positionsInflight = null; // deduplicates concurrent calls
 const LPAGENT_API = "https://api.lpagent.io/open-api/v1";
 
+// LPAgent only supplies supplemental value/PnL enrichment, so it doesn't need to
+// refresh on every forced getMyPositions(). Give it its own short cache + 429
+// backoff: many force:true callers (PnL poller, exit confirmations, close-verify
+// retries) would otherwise hammer the API and trip its rate limit.
+const LPAGENT_TTL = 60_000;       // reuse enrichment for 60s even across force refreshes
+let _lpAgentCache = {};
+let _lpAgentCacheAt = 0;
+let _lpAgentCooldownUntil = 0;    // after a 429, stop hitting the API until this time
+
 async function fetchLpAgentOpenPositions(walletAddress) {
   if (!process.env.LPAGENT_API_KEY) return {};
+
+  const now = Date.now();
+  // Serve recent enrichment without re-hitting the API.
+  if (now - _lpAgentCacheAt < LPAGENT_TTL) return _lpAgentCache;
+  // Backing off after a rate-limit — keep using the last good enrichment.
+  if (now < _lpAgentCooldownUntil) return _lpAgentCache;
 
   const url = `${LPAGENT_API}/lp-positions/opening?owner=${walletAddress}`;
   try {
@@ -358,8 +373,15 @@ async function fetchLpAgentOpenPositions(walletAddress) {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      log("lpagent_api", `HTTP ${res.status} for owner ${walletAddress.slice(0, 8)}: ${body.slice(0, 160)}`);
-      return {};
+      if (res.status === 429) {
+        const retryAfter = parseInt(res.headers.get("retry-after") || "", 10);
+        const backoffMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : 120_000;
+        _lpAgentCooldownUntil = now + backoffMs;
+        log("lpagent_api", `HTTP 429 for owner ${walletAddress.slice(0, 8)} — backing off ${Math.round(backoffMs / 1000)}s, using cached enrichment`);
+      } else {
+        log("lpagent_api", `HTTP ${res.status} for owner ${walletAddress.slice(0, 8)}: ${body.slice(0, 160)}`);
+      }
+      return _lpAgentCache; // best-effort: keep last good data instead of dropping it
     }
     const data = await res.json();
     const positions = data?.data || [];
@@ -368,10 +390,12 @@ async function fetchLpAgentOpenPositions(walletAddress) {
       const addr = p.position || p.id || p.tokenId;
       if (addr) byAddress[addr] = p;
     }
+    _lpAgentCache = byAddress;
+    _lpAgentCacheAt = now;
     return byAddress;
   } catch (e) {
     log("lpagent_api", `Fetch error for owner ${walletAddress.slice(0, 8)}: ${e.message}`);
-    return {};
+    return _lpAgentCache;
   }
 }
 
