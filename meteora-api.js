@@ -124,17 +124,6 @@ export async function fetchOpenPositions(walletAddress) {
   return fetchWithRetry(`${BASE_URL}/wallet/${walletAddress}/open_positions`);
 }
 
-// ─── Position Events ───────────────────────────────────────────
-
-export async function fetchPositionEvents(positionAddress) {
-  if (!positionAddress) return null;
-
-  const data = await fetchWithRetry(`${BASE_URL}/position/${positionAddress}/events`);
-  if (Array.isArray(data)) return data;
-  if (data?.data && Array.isArray(data.data)) return data.data;
-  return data;
-}
-
 // ─── Position Total Claimed Fees ───────────────────────────────
 
 export async function fetchPositionClaimFees(positionAddress) {
@@ -272,33 +261,8 @@ export async function enrichPosition(position) {
     }
   }
 
-  await sleep(100);
-
-  // ── 3. Position events ─────────────────────────────────────
-  const posAddr = position.position || position.position_address;
-  if (posAddr) {
-    try {
-      const events = await fetchPositionEvents(posAddr);
-      if (Array.isArray(events) && events.length > 0) {
-        enriched.event_count_deposits = events.filter((e) => e.type === "deposit").length;
-        enriched.event_count_withdraws = events.filter((e) => e.type === "withdraw").length;
-        enriched.event_count_claims = events.filter((e) => e.type === "claim_fee" || e.type === "claim").length;
-        enriched.total_events = events.length;
-
-        const deposits = events.filter((e) => e.type === "deposit");
-        const withdraws = events.filter((e) => e.type === "withdraw");
-        if (deposits.length > 0 && withdraws.length > 0) {
-          const firstDeposit = parseTimestamp(deposits[0].timestamp || deposits[0].created_at);
-          const firstWithdraw = parseTimestamp(withdraws[0].timestamp || withdraws[0].created_at);
-          if (firstDeposit && firstWithdraw) {
-            enriched.minutes_to_first_withdraw = round((firstWithdraw - firstDeposit) / 60, 1);
-          }
-        }
-      }
-    } catch (err) {
-      log("meteora_api_error", `Events fetch failed for ${posAddr}: ${err.message}`);
-    }
-  }
+  // Position-events enrichment was removed: the /position/{addr}/events endpoint
+  // 404s and its fields never populated. Price/volume enrichment above is enough.
 
   enriched._enriched_at = new Date().toISOString();
   return enriched;

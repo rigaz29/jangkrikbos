@@ -1003,6 +1003,20 @@ export async function closePosition({ position_address, reason, skip_swap = fals
       const closeReason = tracked?.pending_close_reason || reason || "agent decision";
       const minutesInRange = Math.max(0, minutesHeld - minutesOOR);
 
+      // Which side did the exit happen on? Compare the pool's current active bin to
+      // the deployed range — "above" (price pumped past range), "below" (dumped past
+      // range), or "in_range". Best-effort; key signal for range-width tuning.
+      let oorSide = null;
+      const br = tracked.bin_range;
+      if (br && br.min != null && br.max != null) {
+        try {
+          const ab = await pool.getActiveBin();
+          if (ab?.binId != null) {
+            oorSide = ab.binId > br.max ? "above" : ab.binId < br.min ? "below" : "in_range";
+          }
+        } catch { /* best-effort */ }
+      }
+
       await recordPerformance({
         position: position_address,
         pool: poolAddress,
@@ -1020,6 +1034,7 @@ export async function closePosition({ position_address, reason, skip_swap = fals
         minutes_in_range: minutesInRange,
         minutes_held: minutesHeld,
         close_reason: closeReason,
+        oor_side: oorSide,
       });
 
       return {

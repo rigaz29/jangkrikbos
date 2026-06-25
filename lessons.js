@@ -52,12 +52,34 @@ export async function recordPerformance(perf) {
     return;
   }
 
+  // ── Derived metrics for data-driven range/strategy tuning ──────
+  const binStep = perf.bin_step;
+  const binsBelow = perf.bin_range?.bins_below ?? null;
+  const binsAbove = perf.bin_range?.bins_above ?? null;
+  const okStep = Number.isFinite(binStep) && binStep > 0;
+  // Deployed range width in price %: down = how far the range covers a drop;
+  // up = how far it covers a rise. Derived from bin count + the pool's bin_step.
+  const range_downside_pct = (okStep && binsBelow > 0)
+    ? Math.round((1 - Math.pow(1 + binStep / 10000, -binsBelow)) * 1000) / 10 : null;
+  const range_upside_pct = (okStep && binsAbove > 0)
+    ? Math.round((Math.pow(1 + binStep / 10000, binsAbove) - 1) * 1000) / 10 : null;
+  const hours = perf.minutes_held > 0 ? perf.minutes_held / 60 : null;
+  const fees_per_hour = hours ? Math.round((perf.fees_earned_usd / hours) * 100) / 100 : null;
+  const fees_per_tvl_per_hour = (hours && perf.initial_value_usd > 0)
+    ? Math.round((perf.fees_earned_usd / perf.initial_value_usd / hours) * 10000) / 100 : null;
+
   let entry = {
-    ...perf,
+    ...perf,                       // includes oor_side (passed by closePosition)
     pnl_usd: Math.round(pnl_usd * 100) / 100,
     pnl_pct: Math.round(pnl_pct * 100) / 100,
     range_efficiency: Math.round(range_efficiency * 10) / 10,
     duration_hours: perf.minutes_held > 0 ? Math.round((perf.minutes_held / 60) * 10) / 10 : null,
+    bins_below: binsBelow,
+    bins_above: binsAbove,
+    range_downside_pct,
+    range_upside_pct,
+    fees_per_hour,
+    fees_per_tvl_per_hour,
     recorded_at: new Date().toISOString(),
   };
 
@@ -123,13 +145,14 @@ async function enrichFromMeteora(entry) {
     closed_at: entry.recorded_at, recorded_at: entry.recorded_at,
   });
 
+  // Only fields the Meteora enrichment actually populates. Dropped the ones that
+  // never landed (pool_base_fee, pool_cumulative_volume, volume_trend, event_count_*,
+  // total_events, minutes_to_first_withdraw) — the events endpoint 404s and those
+  // sources don't map, so they were dead weight in every record.
   const fields = [
     "price_at_entry", "price_at_exit", "price_change_pct",
     "price_max", "price_min", "price_range_pct", "price_max_drawdown_pct",
-    "pool_tvl_usd", "pool_base_fee", "pool_cumulative_volume",
-    "avg_volume_per_candle", "total_volume_during", "volume_trend",
-    "event_count_deposits", "event_count_withdraws", "event_count_claims",
-    "total_events", "minutes_to_first_withdraw",
+    "pool_tvl_usd", "avg_volume_per_candle", "total_volume_during",
     "_candle_count", "_candle_timeframe", "_pool_snapshot", "_enriched_at",
   ];
   for (const f of fields) { if (enriched[f] != null && entry[f] == null) entry[f] = enriched[f]; }
