@@ -233,6 +233,25 @@ export function setPositionInstruction(position_address, instruction) {
   return true;
 }
 
+/**
+ * Record the deterministic close reason a management rule assigned to a position,
+ * so closePosition() can use it for pool-memory / cooldown classification instead
+ * of relying on the free-form reason the LLM passes to close_position.
+ * Pass a falsy reason to clear it (e.g. when the rule resolves to STAY/CLAIM).
+ */
+export function setPendingCloseReason(position_address, reason) {
+  const state = load();
+  const pos = state.positions[position_address];
+  if (!pos) return false;
+  if (reason) {
+    pos.pending_close_reason = reason;
+  } else {
+    delete pos.pending_close_reason;
+  }
+  save(state);
+  return true;
+}
+
 export function queuePeakConfirmation(position_address, candidatePnlPct) {
   if (candidatePnlPct == null) return false;
   const state = load();

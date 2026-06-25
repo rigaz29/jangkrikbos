@@ -973,7 +973,7 @@ export async function closePosition({ position_address, reason }) {
         initial_value_usd: initialUsd,
         minutes_in_range: minutesHeld - minutesOOR,
         minutes_held: minutesHeld,
-        close_reason: reason || "agent decision",
+        close_reason: tracked?.pending_close_reason || reason || "agent decision",
       });
 
       return {

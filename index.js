@@ -11,7 +11,7 @@ import { evolveThresholds, getPerformanceSummary, bootstrapFromHistory } from ".
 import { registerCronRestarter } from "./tools/executor.js";
 import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, isEnabled as telegramEnabled, createLiveMessage } from "./telegram.js";
 import { generateBriefing } from "./briefing.js";
-import { getLastBriefingDate, setLastBriefingDate, getTrackedPosition, setPositionInstruction, updatePnlAndCheckExits, queuePeakConfirmation, resolvePendingPeak, queueTrailingDropConfirmation, resolvePendingTrailingDrop, queueStopLossConfirmation, resolvePendingStopLoss } from "./state.js";
+import { getLastBriefingDate, setLastBriefingDate, getTrackedPosition, setPositionInstruction, setPendingCloseReason, updatePnlAndCheckExits, queuePeakConfirmation, resolvePendingPeak, queueTrailingDropConfirmation, resolvePendingTrailingDrop, queueStopLossConfirmation, resolvePendingStopLoss } from "./state.js";
 import { getActiveStrategy } from "./strategy-library.js";
 import { recordPositionSnapshot, recallForPool, addPoolNote } from "./pool-memory.js";
 import { checkSmartWalletsOnPool } from "./smart-wallets.js";
@@ -119,6 +119,7 @@ function scheduleTrailingDropConfirmation(positionAddress) {
       if (resolved?.confirmed) {
         log("state", `[Trailing recheck] Confirmed trailing exit for ${positionAddress} — closing directly`);
         try {
+          setPendingCloseReason(positionAddress, null); // explicit trailing reason is authoritative
           await closePosition({ position_address: positionAddress, reason: resolved.reason });
           log("state", `[Trailing TP] Direct close succeeded for ${positionAddress}`);
         } catch (closeErr) {
@@ -151,6 +152,7 @@ function scheduleStopLossConfirmation(positionAddress) {
       if (resolved?.confirmed) {
         log("state", `[SL recheck] Confirmed stop loss for ${positionAddress} — closing directly`);
         try {
+          setPendingCloseReason(positionAddress, null); // explicit stop-loss reason is authoritative
           await closePosition({ position_address: positionAddress, reason: resolved.reason });
           log("state", `[Stop Loss] Direct close succeeded for ${positionAddress}`);
         } catch (closeErr) {
@@ -347,6 +349,14 @@ export async function runManagementCycle({ silent = false } = {}) {
     const cur = config.management.solMode ? "◎" : "$";
     mgmtReport = reportLines.join("\n\n") +
       `\n\nSummary: 💼 ${positions.length} positions | ${cur}${totalValue.toFixed(4)} | fees: ${cur}${totalUnclaimed.toFixed(4)} | ${actionSummary}`;
+
+    // Persist the deterministic close reason so closePosition() classifies the
+    // close correctly even if the LLM omits/rephrases the reason argument.
+    // Clear it for non-CLOSE actions so a stale reason can't leak to a later close.
+    for (const p of positionData) {
+      const a = actionMap.get(p.position);
+      setPendingCloseReason(p.position, a?.action === "CLOSE" ? a.reason : null);
+    }
 
     // ── Call LLM only if action needed ──────────────────────────────
     const actionPositions = positionData.filter(p => {
@@ -878,6 +888,7 @@ async function telegramHandler(msg) {
       if (idx < 0 || idx >= positions.length) { await sendMessage("Invalid number. Use /positions first."); return; }
       const pos = positions[idx];
       await sendMessage(`Closing ${pos.pair}...`);
+      setPendingCloseReason(pos.position, null); // manual close — no deterministic rule reason
       const result = await closePosition({ position_address: pos.position });
       if (result.success) {
         const closeTxs = result.close_txs?.length ? result.close_txs : result.txs;
