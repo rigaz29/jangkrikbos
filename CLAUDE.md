@@ -153,17 +153,35 @@ Before `deploy_position` executes:
 
 ---
 
-## bins_below Calculation (SCREENER)
+## Bin Range Calculation (`deployPosition`, dlmm.js)
 
-Linear formula based on pool volatility (set in screener prompt, `index.js`):
+Range is centered on the pool's current active bin:
 
 ```
-bins_below = round(35 + (volatility / 5) * 34), clamped to [35, 69]
+range = [ active_bin − binsBelow , active_bin + binsAbove ]
 ```
 
-- Low volatility (0) → 35 bins
-- High volatility (5+) → 69 bins
-- Any value in between is valid (continuous, not tiered)
+`binsBelow`/`binsAbove` are NOT volatility-linear. They're derived from a target
+price-move % (config.strategy) converted to a bin count via the pool's bin_step
+(`calcBinsFromTarget`, dlmm.js:89):
+
+```
+bins = ceil( |ln(1 ± targetPct)| / ln(1 + binStep / 10000) )
+```
+
+| Side | Source % | Applies to |
+|------|----------|------------|
+| `binsBelow` | `targetDownsidePct` (default 0.35 → covers a 35% drop) | always |
+| `binsAbove` | `targetUpsidePct` (default 0.20 → 20% rise) | **spot only** — `bid_ask` forces `binsAbove = 0` |
+
+So **volatility decides the SHAPE, not the width**: it picks the strategy
+(`volatility >= volatilityStrategyThreshold` (2.5) → `bid_ask` one-sided down;
+else `spot` two-sided). Downside width stays 35% regardless of volatility.
+
+The autonomous screener does NOT pass `bins_below`/`bins_above` (prompt.js:132 —
+auto-calculated); it only passes `bin_step` + `volatility`. An LLM/manual caller
+MAY pass explicit bins to override. Total > 69 bins → "wide range" deploy path;
+max 1400 bins total.
 
 ---
 
