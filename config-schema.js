@@ -42,6 +42,7 @@ export const CONFIG_SCHEMA = [
   // ─── Management ─────────────────────────────────────────────────────────
   { key: "minClaimAmount",        section: "management", def: 5,        help: "Min unclaimed fees (USD) before claiming." },
   { key: "autoSwapAfterClaim",    section: "management", def: false,    help: "Auto-swap claimed base token back to SOL after a standalone claim." },
+  { key: "autoSweepStranded",     section: "management", def: true,     help: "Each management cycle, swap stray non-SOL tokens (>= $0.10, excluding open-position tokens & stables) back to SOL. Safety net for closes that landed but errored." },
   { key: "outOfRangeBinsToClose", section: "management", def: 10,       help: "If active bin is this many bins ABOVE range, close (pumped far above)." },
   { key: "outOfRangeWaitMinutes", section: "management", def: 30,       help: "Minutes out-of-range before closing." },
   { key: "oorCooldownTriggerCount", section: "management", def: 3,      help: "OOR closes within the window before a pool/token goes on cooldown." },

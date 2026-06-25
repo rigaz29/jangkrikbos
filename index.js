@@ -4,7 +4,7 @@ import readline from "readline";
 import { agentLoop } from "./agent.js";
 import { log } from "./logger.js";
 import { getMyPositions, closePosition, getActiveBin } from "./tools/dlmm.js";
-import { getWalletBalances } from "./tools/wallet.js";
+import { getWalletBalances, sweepStrandedTokens } from "./tools/wallet.js";
 import { getTopCandidates } from "./tools/screening.js";
 import { config, computeDeployAmount } from "./config.js";
 import { getPerformanceSummary, bootstrapFromHistory } from "./lessons.js";
@@ -40,6 +40,27 @@ function closeNotifyPayload(res, fallbackPair, fallbackReason) {
     tx: res.close_txs?.[0] ?? res.txs?.[0],
     autoSwapFailed: res.auto_swap_failed,
   };
+}
+
+// Safety net: swap stray non-SOL tokens back to SOL (e.g. a close that landed
+// on-chain but errored on the response, leaving the base token in the wallet).
+// Excludes open-position base tokens & stables. Skips if positions can't load.
+async function runStrandedSweep() {
+  let positions;
+  try {
+    ({ positions } = await getMyPositions());
+  } catch (e) {
+    log("sweep_warn", `Skipping stranded sweep — could not load open positions: ${e.message}`);
+    return { swept: [], failed: [], skipped: true };
+  }
+  const keepMints = (positions || []).map((p) => p.base_mint).filter(Boolean);
+  const result = await sweepStrandedTokens({ keepMints }).catch((e) => ({ swept: [], failed: [], error: e.message }));
+  if (result.swept?.length && telegramEnabled()) {
+    const lines = result.swept.map((s) => `• ${s.symbol} ($${s.usd.toFixed(2)})`).join("\n");
+    const failNote = result.failed?.length ? `\n⚠️ ${result.failed.length} failed — will retry next cycle` : "";
+    await sendHTML(`🧹 <b>Swept stray tokens → SOL</b>\n${lines}${failNote}`).catch(() => {});
+  }
+  return result;
 }
 
 // ═══════════════════════════════════════════
@@ -446,6 +467,9 @@ After executing, write a brief one-line result per position.
           notifyOutOfRange({ pair: p.pair, minutesOOR: p.minutes_out_of_range, pnlPct: p.pnl_pct }).catch(() => { });
         }
       }
+    }
+    if (config.management.autoSweepStranded) {
+      await runStrandedSweep().catch((e) => log("cron_error", `Stranded sweep failed: ${e.message}`));
     }
   }
   return mgmtReport;
@@ -916,6 +940,17 @@ async function telegramHandler(msg) {
       } else {
         await sendMessage(`❌ Close failed: ${JSON.stringify(result)}`);
       }
+    } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => {}); }
+    return;
+  }
+
+  if (text === "/sweep") {
+    try {
+      await sendMessage("🧹 Sweeping stray tokens → SOL...");
+      const result = await runStrandedSweep(); // sends a card on success
+      if (result.skipped) await sendMessage("Could not load positions — sweep skipped, try again.");
+      else if (!result.swept?.length && !result.failed?.length) await sendMessage("Nothing to sweep — no stray tokens ≥ $0.10 (excludes SOL, stables, and open-position tokens).");
+      else if (!result.swept?.length) await sendMessage(`⚠️ ${result.failed.length} token(s) failed to swap — try again shortly.`);
     } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => {}); }
     return;
   }

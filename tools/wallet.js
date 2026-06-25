@@ -280,13 +280,15 @@ async function swapViaQuoteApi({ wallet, connection, input_mint, output_mint, am
  *
  * @returns {{swapped:boolean, failed?:boolean, error?:string, symbol?:string, amountOut?:number, note?:string, reason?:string}}
  */
-export async function autoSwapToSol(baseMint, { minUsd = 0.10 } = {}) {
+export async function autoSwapToSol(baseMint, { minUsd = 0.10, token = null } = {}) {
   if (!baseMint) return { swapped: false, reason: "no base mint" };
   const mint = normalizeMint(baseMint);
   if (mint === config.tokens.SOL) return { swapped: false, reason: "already SOL" };
   try {
-    const balances = await getWalletBalances();
-    const token = balances.tokens?.find((t) => t.mint === mint);
+    if (!token) {
+      const balances = await getWalletBalances();
+      token = balances.tokens?.find((t) => t.mint === mint);
+    }
     if (!token || !(token.usd >= minUsd)) return { swapped: false, reason: "dust or no balance" };
     const sym = token.symbol || mint.slice(0, 8);
     log("swap", `Auto-swapping ${sym} ($${token.usd.toFixed(2)}) back to SOL`);
@@ -311,4 +313,45 @@ export async function autoSwapToSol(baseMint, { minUsd = 0.10 } = {}) {
     log("swap_error", `Auto-swap failed: ${e.message}`);
     return { swapped: false, failed: true, error: e.message };
   }
+}
+
+// Never sweep these — SOL itself and the common quote/stable tokens.
+const SWEEP_EXCLUDE = new Set([config.tokens.SOL, config.tokens.USDC, config.tokens.USDT]);
+
+/**
+ * Safety net: sweep "stranded" non-SOL tokens in the wallet back to SOL.
+ * Catches tokens left behind when a close errors AFTER the on-chain tx landed
+ * (RPC flakiness) or any other partial failure — regardless of how it happened.
+ *
+ * Only free wallet tokens are visible here; tokens still deployed in an open
+ * position are locked in the position, so a successful re-seed is never swept.
+ * Excludes SOL/stables, dust (< minUsd), and any mint in `keepMints` (the base
+ * tokens of currently-open positions).
+ *
+ * @returns {{ swept: Array, failed: Array, candidates: number, error?: string }}
+ */
+export async function sweepStrandedTokens({ keepMints = [], minUsd = 0.10 } = {}) {
+  const keep = new Set(SWEEP_EXCLUDE);
+  for (const m of keepMints) { if (m) keep.add(normalizeMint(m)); }
+
+  const balances = await getWalletBalances();
+  if (balances.error) return { swept: [], failed: [], candidates: 0, error: balances.error };
+
+  const candidates = (balances.tokens || []).filter(
+    (t) => t.mint && !keep.has(t.mint) && typeof t.usd === "number" && t.usd >= minUsd
+  );
+
+  const swept = [], failed = [];
+  for (const t of candidates) {
+    const sym = t.symbol || t.mint.slice(0, 8);
+    log("sweep", `Sweeping stranded ${sym} ($${t.usd.toFixed(2)}) → SOL`);
+    const res = await autoSwapToSol(t.mint, { minUsd, token: t });
+    if (res.swapped) swept.push({ mint: t.mint, symbol: sym, usd: t.usd, amountOut: res.amountOut });
+    else failed.push({ mint: t.mint, symbol: sym, usd: t.usd, error: res.error || res.reason });
+    await new Promise((r) => setTimeout(r, 400)); // pace swaps to avoid rate limits
+  }
+  if (swept.length || failed.length) {
+    log("sweep", `Sweep done: ${swept.length} swept, ${failed.length} failed of ${candidates.length} candidate(s)`);
+  }
+  return { swept, failed, candidates: candidates.length };
 }
