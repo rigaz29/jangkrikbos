@@ -120,6 +120,24 @@ export function normalizeMint(mint) {
   return mint;
 }
 
+// Convert a raw atomic amount to a human-readable decimal value (display-friendly).
+function toDecimal(raw, decimals) {
+  if (raw == null) return null;
+  const n = Number(raw) / Math.pow(10, decimals);
+  return Number.isFinite(n) ? Number(n.toFixed(6)) : null;
+}
+
+// Resolve a mint's decimals (SOL = 9 without an RPC call).
+async function getMintDecimals(connection, mint) {
+  if (!mint || mint === config.tokens.SOL) return 9;
+  try {
+    const info = await connection.getParsedAccountInfo(new PublicKey(mint));
+    return info.value?.data?.parsed?.info?.decimals ?? 9;
+  } catch {
+    return 9;
+  }
+}
+
 export async function swapToken({
   input_mint,
   output_mint,
@@ -142,11 +160,8 @@ export async function swapToken({
     const connection = getConnection();
 
     // ─── Convert to smallest unit ──────────────────────────────
-    let decimals = 9; // SOL default
-    if (input_mint !== config.tokens.SOL) {
-      const mintInfo = await connection.getParsedAccountInfo(new PublicKey(input_mint));
-      decimals = mintInfo.value?.data?.parsed?.info?.decimals ?? 9;
-    }
+    const decimals = await getMintDecimals(connection, input_mint);
+    const outputDecimals = await getMintDecimals(connection, output_mint);
     const amountStr = Math.floor(amount * Math.pow(10, decimals)).toString();
 
     // ─── Get Ultra order (unsigned tx + requestId) ─────────────
@@ -164,7 +179,7 @@ export async function swapToken({
       const body = await orderRes.text();
       if (orderRes.status === 500) {
         log("swap", `Ultra failed for ${input_mint}, falling back to regular swap API`);
-        return await swapViaQuoteApi({ wallet, connection, input_mint, output_mint, amountStr });
+        return await swapViaQuoteApi({ wallet, connection, input_mint, output_mint, amountStr, inputDecimals: decimals, outputDecimals });
       }
       throw new Error(`Ultra order failed: ${orderRes.status} ${body}`);
     }
@@ -207,8 +222,8 @@ export async function swapToken({
       tx: result.signature,
       input_mint,
       output_mint,
-      amount_in: result.inputAmountResult,
-      amount_out: result.outputAmountResult,
+      amount_in: toDecimal(result.inputAmountResult, decimals),
+      amount_out: toDecimal(result.outputAmountResult, outputDecimals),
     };
   } catch (error) {
     log("swap_error", error.message);
@@ -216,7 +231,7 @@ export async function swapToken({
   }
 }
 
-async function swapViaQuoteApi({ wallet, connection, input_mint, output_mint, amountStr }) {
+async function swapViaQuoteApi({ wallet, connection, input_mint, output_mint, amountStr, inputDecimals = 9, outputDecimals = 9 }) {
   // ─── Get quote ─────────────────────────────────────────────
   const quoteRes = await fetch(
     `${JUPITER_QUOTE_API}/quote?inputMint=${input_mint}&outputMint=${output_mint}&amount=${amountStr}&slippageBps=300`,
@@ -246,5 +261,12 @@ async function swapViaQuoteApi({ wallet, connection, input_mint, output_mint, am
   await connection.confirmTransaction(txHash, "confirmed");
 
   log("swap", `SUCCESS (fallback) tx: ${txHash}`);
-  return { success: true, tx: txHash, input_mint, output_mint };
+  return {
+    success: true,
+    tx: txHash,
+    input_mint,
+    output_mint,
+    amount_in: toDecimal(quote.inAmount, inputDecimals),
+    amount_out: toDecimal(quote.outAmount, outputDecimals),
+  };
 }

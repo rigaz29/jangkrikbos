@@ -329,12 +329,19 @@ export async function executeTool(name, args) {
             const balances = await getWalletBalances({});
             const token = balances.tokens?.find(t => t.mint === result.base_mint);
             if (token && token.usd >= 0.10) {
-              log("executor", `Auto-swapping ${token.symbol || result.base_mint.slice(0, 8)} ($${token.usd.toFixed(2)}) back to SOL`);
+              const label = token.symbol || result.base_mint.slice(0, 8);
+              log("executor", `Auto-swapping ${label} ($${token.usd.toFixed(2)}) back to SOL`);
               const swapResult = await swapToken({ input_mint: result.base_mint, output_mint: "SOL", amount: token.balance });
-              // Tell the model the swap already happened so it doesn't call swap_token again
-              result.auto_swapped = true;
-              result.auto_swap_note = `Base token already auto-swapped back to SOL (${token.symbol || result.base_mint.slice(0, 8)} → SOL). Do NOT call swap_token again.`;
-              if (swapResult?.amount_out) result.sol_received = swapResult.amount_out;
+              if (swapResult?.success || swapResult?.dry_run) {
+                // Tell the model the swap already happened so it doesn't call swap_token again
+                result.auto_swapped = true;
+                result.auto_swap_note = `Base token already auto-swapped back to SOL (${label} → SOL). Do NOT call swap_token again.`;
+              } else {
+                // swapToken returns {success:false} instead of throwing — surface it so the token isn't stranded
+                log("executor_warn", `Auto-swap after close did not succeed: ${swapResult?.error || "unknown"} — base token left in wallet`);
+                result.auto_swap_failed = true;
+                result.auto_swap_note = `Auto-swap of base token to SOL FAILED (${swapResult?.error || "unknown"}). ${label} is STILL in the wallet — call swap_token to convert it to SOL.`;
+              }
             }
           } catch (e) {
             log("executor_warn", `Auto-swap after close failed: ${e.message}`);
@@ -345,8 +352,18 @@ export async function executeTool(name, args) {
           const balances = await getWalletBalances({});
           const token = balances.tokens?.find(t => t.mint === result.base_mint);
           if (token && token.usd >= 0.10) {
-            log("executor", `Auto-swapping claimed ${token.symbol || result.base_mint.slice(0, 8)} ($${token.usd.toFixed(2)}) back to SOL`);
-            await swapToken({ input_mint: result.base_mint, output_mint: "SOL", amount: token.balance });
+            const label = token.symbol || result.base_mint.slice(0, 8);
+            log("executor", `Auto-swapping claimed ${label} ($${token.usd.toFixed(2)}) back to SOL`);
+            const swapResult = await swapToken({ input_mint: result.base_mint, output_mint: "SOL", amount: token.balance });
+            if (swapResult?.success || swapResult?.dry_run) {
+              result.auto_swapped = true;
+              result.auto_swap_note = `Claimed base token already auto-swapped back to SOL (${label} → SOL). Do NOT call swap_token again.`;
+            } else {
+              // swapToken returns {success:false} instead of throwing — surface it so the token isn't stranded
+              log("executor_warn", `Auto-swap after claim did not succeed: ${swapResult?.error || "unknown"} — claimed token left in wallet`);
+              result.auto_swap_failed = true;
+              result.auto_swap_note = `Auto-swap of claimed base token to SOL FAILED (${swapResult?.error || "unknown"}). ${label} is STILL in the wallet — call swap_token to convert it to SOL.`;
+            }
           }
         } catch (e) {
           log("executor_warn", `Auto-swap after claim failed: ${e.message}`);
