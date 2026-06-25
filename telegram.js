@@ -403,7 +403,7 @@ export async function notifyDeploy({ pair, amountSol, strategy, position, pool, 
   await sendHTML(lines.join("\n") + linkRow([solscanAcct(position, "Position"), solscanAcct(pool, "Pool"), solscanTx(tx)]));
 }
 
-export async function notifyClose({ pair, pnlUsd, pnlPct, reason, feesUsd, minutesHeld, minutesInRange, strategy, position, pool, tx }) {
+export async function notifyClose({ pair, pnlUsd, pnlPct, reason, feesUsd, minutesHeld, minutesInRange, strategy, position, pool, tx, autoSwapFailed }) {
   const win = (pnlUsd ?? 0) >= 0;
   const lines = [
     `${win ? "🟢" : "🔴"} <b>CLOSED</b> · ${esc(pair)}`,
@@ -420,6 +420,7 @@ export async function notifyClose({ pair, pnlUsd, pnlPct, reason, feesUsd, minut
   if (num(feesUsd)) stats.push(`Fees ${fmtUsdCompact(feesUsd)}`);
   if (strategy) stats.push(esc(strategy));
   if (stats.length) lines.push(`⏱ ${stats.join("  ·  ")}`);
+  if (autoSwapFailed) lines.push(`⚠️ <b>Base token left in wallet</b> — swap to SOL failed`);
   await sendHTML(lines.join("\n") + linkRow([solscanAcct(pool, "Pool"), solscanTx(tx)]));
 }
 

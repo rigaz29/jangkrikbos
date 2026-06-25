@@ -9,7 +9,7 @@ import {
   closePosition,
   searchPools,
 } from "./dlmm.js";
-import { getWalletBalances, swapToken } from "./wallet.js";
+import { getWalletBalances, swapToken, autoSwapToSol } from "./wallet.js";
 import { studyTopLPers } from "./study.js";
 import { addLesson, clearAllLessons, clearPerformance, removeLessonsByKeyword, getPerformanceHistory, pinLesson, unpinLesson, listLessons, bootstrapFromHistory } from "../lessons.js";
 import { setPositionInstruction } from "../state.js";
@@ -342,57 +342,21 @@ export async function executeTool(name, args) {
           strategy: result.strategy,
           pool: result.pool,
           tx: result.close_txs?.[0] ?? result.txs?.[0] ?? result.tx,
+          autoSwapFailed: result.auto_swap_failed,
         }).catch(() => {});
         // Note low-yield closes in pool memory so screener avoids redeploying
         if (args.reason && args.reason.toLowerCase().includes("yield")) {
           const poolAddr = result.pool || args.pool_address;
           if (poolAddr) addPoolNote({ pool_address: poolAddr, note: `Closed: low yield (fee/TVL below threshold) at ${new Date().toISOString().slice(0,10)}` }).catch?.(() => {});
         }
-        // Auto-swap base token back to SOL unless user said to hold
-        if (!args.skip_swap && result.base_mint) {
-          try {
-            const balances = await getWalletBalances({});
-            const token = balances.tokens?.find(t => t.mint === result.base_mint);
-            if (token && token.usd >= 0.10) {
-              const label = token.symbol || result.base_mint.slice(0, 8);
-              log("executor", `Auto-swapping ${label} ($${token.usd.toFixed(2)}) back to SOL`);
-              const swapResult = await swapToken({ input_mint: result.base_mint, output_mint: "SOL", amount: token.balance });
-              if (swapResult?.success || swapResult?.dry_run) {
-                // Tell the model the swap already happened so it doesn't call swap_token again
-                result.auto_swapped = true;
-                result.auto_swap_note = `Base token already auto-swapped back to SOL (${label} → SOL). Do NOT call swap_token again.`;
-              } else {
-                // swapToken returns {success:false} instead of throwing — surface it so the token isn't stranded
-                log("executor_warn", `Auto-swap after close did not succeed: ${swapResult?.error || "unknown"} — base token left in wallet`);
-                result.auto_swap_failed = true;
-                result.auto_swap_note = `Auto-swap of base token to SOL FAILED (${swapResult?.error || "unknown"}). ${label} is STILL in the wallet — call swap_token to convert it to SOL.`;
-              }
-            }
-          } catch (e) {
-            log("executor_warn", `Auto-swap after close failed: ${e.message}`);
-          }
-        }
+        // NOTE: base-token → SOL auto-swap now runs inside closePosition() so it
+        // applies to every close path (cron/LLM, trailing TP, stop loss, manual).
+        // result.auto_swapped / auto_swap_note already reflect it here.
       } else if (name === "claim_fees" && config.management.autoSwapAfterClaim && result.base_mint) {
-        try {
-          const balances = await getWalletBalances({});
-          const token = balances.tokens?.find(t => t.mint === result.base_mint);
-          if (token && token.usd >= 0.10) {
-            const label = token.symbol || result.base_mint.slice(0, 8);
-            log("executor", `Auto-swapping claimed ${label} ($${token.usd.toFixed(2)}) back to SOL`);
-            const swapResult = await swapToken({ input_mint: result.base_mint, output_mint: "SOL", amount: token.balance });
-            if (swapResult?.success || swapResult?.dry_run) {
-              result.auto_swapped = true;
-              result.auto_swap_note = `Claimed base token already auto-swapped back to SOL (${label} → SOL). Do NOT call swap_token again.`;
-            } else {
-              // swapToken returns {success:false} instead of throwing — surface it so the token isn't stranded
-              log("executor_warn", `Auto-swap after claim did not succeed: ${swapResult?.error || "unknown"} — claimed token left in wallet`);
-              result.auto_swap_failed = true;
-              result.auto_swap_note = `Auto-swap of claimed base token to SOL FAILED (${swapResult?.error || "unknown"}). ${label} is STILL in the wallet — call swap_token to convert it to SOL.`;
-            }
-          }
-        } catch (e) {
-          log("executor_warn", `Auto-swap after claim failed: ${e.message}`);
-        }
+        const swapInfo = await autoSwapToSol(result.base_mint);
+        if (swapInfo.swapped) result.auto_swapped = true;
+        if (swapInfo.failed) result.auto_swap_failed = true;
+        if (swapInfo.note) result.auto_swap_note = swapInfo.note;
       }
     }
 

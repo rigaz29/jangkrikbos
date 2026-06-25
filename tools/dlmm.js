@@ -20,7 +20,7 @@ import {
 } from "../state.js";
 import { recordPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
-import { normalizeMint } from "./wallet.js";
+import { normalizeMint, autoSwapToSol } from "./wallet.js";
 
 // ─── Lazy SDK loader ───────────────────────────────────────────
 // @meteora-ag/dlmm → @coral-xyz/anchor uses CJS directory imports
@@ -783,7 +783,7 @@ export async function claimFees({ position_address }) {
 }
 
 // ─── Close Position ────────────────────────────────────────────
-export async function closePosition({ position_address, reason }) {
+export async function closePosition({ position_address, reason, skip_swap = false }) {
   position_address = normalizeMint(position_address);
   if (process.env.DRY_RUN === "true") {
     return { dry_run: true, would_close: position_address, message: "DRY RUN — no transaction sent" };
@@ -906,6 +906,20 @@ export async function closePosition({ position_address, reason }) {
 
     recordClose(position_address, reason || "agent decision");
 
+    // Auto-swap the withdrawn base token back to SOL for EVERY close path
+    // (cron/LLM, trailing TP, stop loss, manual). Runs here — the single close
+    // chokepoint — so the token is never stranded. Honors skip_swap (re-seed).
+    const baseMint = pool.lbPair.tokenXMint.toString();
+    let swapInfo = { swapped: false };
+    if (!skip_swap) {
+      swapInfo = await autoSwapToSol(baseMint);
+    }
+    const autoSwapFields = {
+      auto_swapped: swapInfo.swapped === true,
+      auto_swap_failed: swapInfo.failed === true,
+      ...(swapInfo.note ? { auto_swap_note: swapInfo.note } : {}),
+    };
+
     // Record performance for learning
     if (tracked) {
       const deployedAt = new Date(tracked.deployed_at).getTime();
@@ -994,7 +1008,7 @@ export async function closePosition({ position_address, reason }) {
         txs: txHashes,
         pnl_usd: pnlUsd,
         pnl_pct: pnlPct,
-        base_mint: pool.lbPair.tokenXMint.toString(),
+        base_mint: baseMint,
         reason: closeReason,
         fees_usd: feesUsd,
         minutes_held: minutesHeld,
@@ -1002,6 +1016,7 @@ export async function closePosition({ position_address, reason }) {
         strategy: tracked.strategy || null,
         initial_value_usd: initialUsd,
         final_value_usd: finalValueUsd,
+        ...autoSwapFields,
       };
     }
 
@@ -1013,7 +1028,8 @@ export async function closePosition({ position_address, reason }) {
       claim_txs: claimTxHashes,
       close_txs: closeTxHashes,
       txs: txHashes,
-      base_mint: pool.lbPair.tokenXMint.toString(),
+      base_mint: baseMint,
+      ...autoSwapFields,
     };
   } catch (error) {
     log("close_error", error.message);

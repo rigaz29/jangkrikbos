@@ -270,3 +270,45 @@ async function swapViaQuoteApi({ wallet, connection, input_mint, output_mint, am
     amount_out: toDecimal(quote.outAmount, outputDecimals),
   };
 }
+
+/**
+ * Swap a base token's full wallet balance back to SOL.
+ * Shared by every close path (LLM/cron close, trailing TP, stop loss, manual
+ * /close) and standalone claims, so the base token never gets stranded.
+ * Skips dust (< minUsd) and SOL itself. swapToken() returns {success:false}
+ * instead of throwing, so we surface that as `failed` for the caller/LLM.
+ *
+ * @returns {{swapped:boolean, failed?:boolean, error?:string, symbol?:string, amountOut?:number, note?:string, reason?:string}}
+ */
+export async function autoSwapToSol(baseMint, { minUsd = 0.10 } = {}) {
+  if (!baseMint) return { swapped: false, reason: "no base mint" };
+  const mint = normalizeMint(baseMint);
+  if (mint === config.tokens.SOL) return { swapped: false, reason: "already SOL" };
+  try {
+    const balances = await getWalletBalances();
+    const token = balances.tokens?.find((t) => t.mint === mint);
+    if (!token || !(token.usd >= minUsd)) return { swapped: false, reason: "dust or no balance" };
+    const sym = token.symbol || mint.slice(0, 8);
+    log("swap", `Auto-swapping ${sym} ($${token.usd.toFixed(2)}) back to SOL`);
+    const res = await swapToken({ input_mint: mint, output_mint: "SOL", amount: token.balance });
+    if (res?.success || res?.dry_run) {
+      return {
+        swapped: true,
+        symbol: sym,
+        amountOut: res.amount_out,
+        note: `Base token already auto-swapped back to SOL (${sym} → SOL). Do NOT call swap_token again.`,
+      };
+    }
+    log("swap_error", `Auto-swap of ${sym} did not succeed: ${res?.error || "unknown"} — token left in wallet`);
+    return {
+      swapped: false,
+      failed: true,
+      error: res?.error || "unknown",
+      symbol: sym,
+      note: `Auto-swap of ${sym} to SOL FAILED (${res?.error || "unknown"}). It is STILL in the wallet — call swap_token to convert it to SOL.`,
+    };
+  } catch (e) {
+    log("swap_error", `Auto-swap failed: ${e.message}`);
+    return { swapped: false, failed: true, error: e.message };
+  }
+}

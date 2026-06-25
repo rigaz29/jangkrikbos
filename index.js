@@ -38,6 +38,7 @@ function closeNotifyPayload(res, fallbackPair, fallbackReason) {
     strategy: res.strategy,
     pool: res.pool,
     tx: res.close_txs?.[0] ?? res.txs?.[0],
+    autoSwapFailed: res.auto_swap_failed,
   };
 }
 
