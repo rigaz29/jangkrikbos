@@ -37,8 +37,6 @@ function save(data) { fs.writeFileSync(LESSONS_FILE, JSON.stringify(data, null, 
 // ─── Record Position Performance ──────────────────────────────
 
 export async function recordPerformance(perf) {
-  const data = load();
-
   const suspiciousUnitMix =
     Number.isFinite(perf.initial_value_usd) && Number.isFinite(perf.final_value_usd) &&
     Number.isFinite(perf.amount_sol) && perf.initial_value_usd >= 20 &&
@@ -77,12 +75,20 @@ export async function recordPerformance(perf) {
     log("lessons_warn", `Meteora enrichment failed for ${perf.pool_name || perf.pool}: ${err.message}`);
   }
 
+  // Load fresh right before the write. The Meteora enrichment above can await for
+  // seconds; loading earlier would let a concurrent writer's save (e.g. /pin or a
+  // second close) get clobbered by this stale snapshot.
+  const data = load();
   data.performance.push(entry);
   // Rolling window — keep last 500 records to prevent unbounded file growth
   if (data.performance.length > 500) data.performance = data.performance.slice(-500);
+  // Monotonic close counter — drives the evolution cadence independently of the
+  // capped rolling window. performance.length plateaus at 500, so `length % N`
+  // would fire on *every* close once the cap is hit; totalClosed never resets.
+  data.totalClosed = (data.totalClosed || 0) + 1;
 
   const lesson = derivLesson(entry);
-  if (lesson) { data.lessons.push(lesson); log("lessons", `New lesson: ${lesson.rule}`); }
+  if (lesson) { lesson.id = nextLessonId(data); data.lessons.push(lesson); log("lessons", `New lesson: ${lesson.rule}`); }
   save(data);
 
   // Update pool-level memory
@@ -102,7 +108,7 @@ export async function recordPerformance(perf) {
   }
 
   // Evolve thresholds every 5 closed positions
-  if (data.performance.length % MIN_EVOLVE_POSITIONS === 0) {
+  if (data.totalClosed % MIN_EVOLVE_POSITIONS === 0) {
     const { config, reloadScreeningThresholds } = await import("./config.js");
     const result = evolveThresholds(data.performance, config);
     if (result?.changes && Object.keys(result.changes).length > 0) {
@@ -158,7 +164,7 @@ function derivLesson(perf) {
   let rule = "";
 
   if (outcome === "good" || outcome === "bad") {
-    if (perf.range_efficiency < 30 && outcome === "bad") {
+    if (isFiniteNum(perf.range_efficiency) && perf.range_efficiency < 30 && outcome === "bad") {
       rule = `AVOID: ${perf.pool_name}-type pools (volatility=${perf.volatility}, bin_step=${perf.bin_step}) with strategy="${perf.strategy}" — OOR ${Math.round(100 - perf.range_efficiency)}% of the time.`;
       if (isFiniteNum(perf.price_range_pct)) rule += ` Price swung ${perf.price_range_pct}% — consider wider bin_range or bid_ask strategy.`;
       tags.push("oor", perf.strategy, `volatility_${Math.round(perf.volatility || 0)}`);
@@ -219,7 +225,7 @@ function derivLesson(perf) {
   if (!rule) return null;
 
   return {
-    id: Date.now(), rule, tags, outcome, context,
+    rule, tags, outcome, context,
     pnl_pct: perf.pnl_pct, range_efficiency: perf.range_efficiency,
     price_change_pct: perf.price_change_pct ?? null,
     volume_trend: perf.volume_trend ?? null,
@@ -328,7 +334,7 @@ export function evolveThresholds(perfData, config) {
 
   const data = load();
   data.lessons.push({
-    id: Date.now(),
+    id: nextLessonId(data),
     rule: `[AUTO-EVOLVED @ ${perfData.length} positions] ${Object.entries(changes).map(([k,v]) => `${k}=${v}`).join(", ")} — ${Object.values(rationale).join("; ")}`,
     tags: ["evolution", "config_change"], outcome: "manual", created_at: new Date().toISOString(),
   });
@@ -382,7 +388,7 @@ export async function bootstrapFromHistory(walletAddress, { limit = 10, force = 
     data.performance.push(entry);
     imported++;
     const lesson = derivLesson(entry);
-    if (lesson) { lesson.tags.push("bootstrap"); data.lessons.push(lesson); lessonsGenerated++; }
+    if (lesson) { lesson.id = nextLessonId(data); lesson.tags.push("bootstrap"); data.lessons.push(lesson); lessonsGenerated++; }
   }
 
   save(data);
@@ -393,6 +399,15 @@ export async function bootstrapFromHistory(walletAddress, { limit = 10, force = 
 // ─── Helpers ───────────────────────────────────────────────────
 
 function isFiniteNum(n) { return typeof n === "number" && isFinite(n); }
+// Unique lesson id. Date.now() alone collides when several lessons are created in
+// the same millisecond (e.g. the bootstrap loop, or evolution lesson right after
+// a close lesson). Bump past any existing id so pin/unpin/remove stay 1:1.
+function nextLessonId(data) {
+  let id = Date.now();
+  const used = new Set((data?.lessons || []).map((l) => l.id));
+  while (used.has(id)) id++;
+  return id;
+}
 function avg(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }
 function percentile(arr, p) {
   const sorted = [...arr].sort((a, b) => a - b);
@@ -411,7 +426,7 @@ function nudge(current, target, maxChange) {
 export function addLesson(rule, tags = [], { pinned = false, role = null } = {}) {
   const safeRule = sanitizeLessonText(rule); if (!safeRule) return;
   const data = load();
-  data.lessons.push({ id: Date.now(), rule: safeRule, tags, outcome: "manual", pinned: !!pinned, role: role || null, created_at: new Date().toISOString() });
+  data.lessons.push({ id: nextLessonId(data), rule: safeRule, tags, outcome: "manual", pinned: !!pinned, role: role || null, created_at: new Date().toISOString() });
   save(data);
   log("lessons", `Manual lesson added${pinned ? " [PINNED]" : ""}${role ? ` [${role}]` : ""}: ${safeRule}`);
 }
