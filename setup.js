@@ -213,6 +213,11 @@ const lpAgentKey = await ask(
   alreadySet(ev("LPAGENT_API_KEY", ""))
 );
 
+const jupiterKey = await ask(
+  "Jupiter API key (for swaps, optional — blank uses the free lite-api.jup.ag tier; add a key from portal.jup.ag for higher limits)",
+  alreadySet(ev("JUPITER_API_KEY", ""))
+);
+
 // ─── Section 1b: OKX OnchainOS (optional — screening enrichment) ───────────────
 console.log("\n── OKX OnchainOS (optional — token risk + smart-money enrichment) ──");
 console.log("Leave blank to use public endpoints (no key). Add credentials for the");
@@ -444,6 +449,7 @@ const envUpdates = {
   ...(rpcUrl                ? { RPC_URL: rpcUrl } : {}),
   ...(isKept(heliusKey)     ? {} : { HELIUS_API_KEY: heliusKey }),
   ...(isKept(lpAgentKey)    ? {} : { LPAGENT_API_KEY: lpAgentKey }),
+  ...(isKept(jupiterKey)    ? {} : { JUPITER_API_KEY: jupiterKey }),
   ...(isKept(okxApiKey)     ? {} : { OKX_API_KEY: okxApiKey }),
   ...(isKept(okxSecretKey)  ? {} : { OKX_SECRET_KEY: okxSecretKey }),
   ...(isKept(okxPassphrase) ? {} : { OKX_PASSPHRASE: okxPassphrase }),
@@ -525,6 +531,7 @@ console.log(`
   Base URL:     ${llmBaseUrl}
 
   OKX:          ${finalEnv.OKX_API_KEY && finalEnv.OKX_SECRET_KEY && finalEnv.OKX_PASSPHRASE ? "authenticated OnchainOS API" : "public endpoints (no key)"}
+  Swaps:        ${finalEnv.JUPITER_API_KEY ? "Jupiter api.jup.ag (keyed)" : "Jupiter lite-api (free, no key)"}
   Telegram:     ${telegramToken ? "enabled" : "disabled"}
   .env:         ${ENV_PATH}
   Config:       ${CONFIG_PATH}
