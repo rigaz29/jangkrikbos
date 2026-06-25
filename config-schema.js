@@ -37,7 +37,7 @@ export const CONFIG_SCHEMA = [
   { key: "minTokenAgeHours",      section: "screening", def: null,     help: "Min token age in hours (null = no minimum)." },
   { key: "maxTokenAgeHours",      section: "screening", def: null,     help: "Max token age in hours (null = no maximum)." },
   { key: "athFilterPct",          section: "screening", def: null,     help: "Only deploy if price is >= this % below ATH, e.g. -20 (null = off)." },
-  { key: "maxVolatility",         section: "screening", def: 10,       help: "Max pool volatility at screening time (~0-5 typical, 5+ high). Hard filter + auto-evolved." },
+  { key: "maxVolatility",         section: "screening", def: 10,       help: "Max pool volatility at screening time (~0-5 typical, 5+ high). Hard filter." },
 
   // ─── Management ─────────────────────────────────────────────────────────
   { key: "minClaimAmount",        section: "management", def: 5,        help: "Min unclaimed fees (USD) before claiming." },
@@ -59,7 +59,6 @@ export const CONFIG_SCHEMA = [
   { key: "trailingDropPct",       section: "management", def: 1.5,      help: "Close when PnL drops this % from the confirmed peak." },
   { key: "pnlSanityMaxDiffPct",   section: "management", def: 5,        help: "Max diff between reported and derived PnL % before ignoring a tick." },
   { key: "solMode",               section: "management", def: false,    help: "Report positions/PnL/balances in SOL instead of USD." },
-  { key: "autoEvolve",            section: "management", def: false,    help: "Auto-evolve screening thresholds every 5 closed positions. Off by default — run /evolve to evolve manually." },
 
   // ─── Strategy ───────────────────────────────────────────────────────────
   { key: "strategy",              section: "strategy", def: "bid_ask", help: "Fallback LP strategy when volatility isn't provided (manual deploys): bid_ask|spot." },

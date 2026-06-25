@@ -64,22 +64,3 @@ config.llm.generalModel    = u.generalModel    ?? process.env.LLM_MODEL ?? DEF.g
 export function computeDeployAmount(walletSol) {
   return parseFloat(Number(config.management.deployAmountSol ?? 0.5).toFixed(2));
 }
-
-/**
- * Reload user-config.json and apply updated screening thresholds to the
- * in-memory config object. Called after threshold evolution so the next
- * agent cycle uses the evolved values without a restart. Iterates every
- * screening-section key in the schema (no hand-maintained list).
- */
-export function reloadScreeningThresholds() {
-  if (!fs.existsSync(USER_CONFIG_PATH)) return;
-  try {
-    const fresh = JSON.parse(fs.readFileSync(USER_CONFIG_PATH, "utf8"));
-    const s = config.screening;
-    for (const { key, section } of CONFIG_SCHEMA) {
-      if (section === "screening" && fresh[key] !== undefined) s[key] = fresh[key];
-    }
-  } catch (err) {
-    log("config_error", `Failed to reload screening thresholds: ${err.message}`);
-  }
-}

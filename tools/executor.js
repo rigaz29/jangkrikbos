@@ -20,7 +20,7 @@ import { addToBlacklist, removeFromBlacklist, listBlacklist } from "../token-bla
 import { blockDev, unblockDev, listBlockedDevs } from "../dev-blocklist.js";
 import { addSmartWallet, removeSmartWallet, listSmartWallets, checkSmartWalletsOnPool } from "../smart-wallets.js";
 import { getTokenInfo, getTokenHolders, getTokenNarrative } from "./token.js";
-import { config, reloadScreeningThresholds } from "../config.js";
+import { config } from "../config.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -178,7 +178,6 @@ const toolMap = {
       trailingTriggerPct: ["management", "trailingTriggerPct"],
       trailingDropPct: ["management", "trailingDropPct"],
       solMode: ["management", "solMode"],
-      autoEvolve: ["management", "autoEvolve"],
       minSolToOpen: ["management", "minSolToOpen"],
       deployAmountSol: ["management", "deployAmountSol"],
       gasReserve: ["management", "gasReserve"],

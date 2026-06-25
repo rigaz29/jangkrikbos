@@ -12,7 +12,7 @@ agent.js            ReAct loop (OpenRouter/OpenAI-compatible): LLM → tool call
 config.js           Runtime config from user-config.json + .env; exposes config object
 prompt.js           Builds system prompt per agent role (SCREENER / MANAGER / GENERAL)
 state.js            Position registry (state.json): tracks bin ranges, OOR timestamps, notes
-lessons.js          Learning engine: records closed-position perf, derives lessons, evolves thresholds
+lessons.js          Learning engine: records closed-position perf, derives lessons
 pool-memory.js      Per-pool deploy history + snapshots (pool-memory.json)
 strategy-library.js Saved LP strategies (strategy-library.json)
 briefing.js         Daily Telegram briefing (HTML)
@@ -136,7 +136,7 @@ Drop confirmation tolerance: 0.3% (index.js `TRAILING_DROP_CONFIRM_TOLERANCE_PCT
 1. **Deploy**: `deploy_position` → executor safety checks → `trackPosition()` in state.js → Telegram notify
 2. **Monitor**: management cron → `getMyPositions()` → `getPositionPnl()` → OOR detection → pool-memory snapshots
 3. **Close**: `close_position` → `recordPerformance()` in lessons.js → auto-swap base token to SOL → Telegram notify
-4. **Learn**: `evolveThresholds()` runs on performance data → updates config.screening → persists to user-config.json
+4. **Learn**: `recordPerformance()` records the closed position, derives lessons, and updates pool-memory; lessons feed back into prompts via `getLessonsForPrompt()`
 
 ---
 
@@ -224,9 +224,8 @@ const actualBaseFee = baseFactor > 0
 
 `lessons.js` records closed position performance and auto-derives lessons. Key points:
 - `getLessonsForPrompt({ agentType })` — injects relevant lessons into system prompt
-- `evolveThresholds()` — adjusts screening thresholds based on winners vs losers
 - Performance recorded via `recordPerformance()` called from `closePosition()` in `tools/dlmm.js` after a confirmed close
-- `evolveThresholds()` evolves `maxVolatility`, `minFeeActiveTvlRatio`, `minOrganic`, and `minTvl`. `maxVolatility` is a real `config.screening` key (default 10) and is also enforced as a hard screening filter in `getTopCandidates()` (drops pools with `volatility > maxVolatility`).
+- Screening thresholds are NOT auto-tuned — they only change when the user edits config / `update_config`. `maxVolatility` is a real `config.screening` key (default 10) enforced as a hard screening filter in `getTopCandidates()` (drops pools with `volatility > maxVolatility`).
 
 ---
 
@@ -258,5 +257,4 @@ Not required for normal operation.
 
 ## Known Issues / Tech Debt
 
-- `lessons.js evolveThresholds()` evolves `maxVolatility` + `minFeeTvlRatio` (wrong key names — should be `minFeeActiveTvlRatio`; `maxVolatility` doesn't exist in config at all). The evolution is a no-op for those keys.
 - `get_wallet_positions` tool (dlmm.js) is in definitions.js but not in MANAGER_TOOLS or SCREENER_TOOLS — only available in GENERAL role.

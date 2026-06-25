@@ -9,17 +9,11 @@
  */
 
 import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { log } from "./logger.js";
 import { enrichPosition, fetchAndEnrichClosedPositions } from "./meteora-api.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const USER_CONFIG_PATH = path.join(__dirname, "user-config.json");
-
 const LESSONS_FILE = "./lessons.json";
-const MIN_EVOLVE_POSITIONS = 5;
-const MAX_CHANGE_PER_STEP  = 0.20;
+const DARWIN_RECALC_POSITIONS = 5; // recalc adaptive signal weights every N closed positions (Darwin)
 const MAX_MANUAL_LESSON_LENGTH = 400;
 
 function sanitizeLessonText(text, maxLen = MAX_MANUAL_LESSON_LENGTH) {
@@ -82,7 +76,7 @@ export async function recordPerformance(perf) {
   data.performance.push(entry);
   // Rolling window — keep last 500 records to prevent unbounded file growth
   if (data.performance.length > 500) data.performance = data.performance.slice(-500);
-  // Monotonic close counter — drives the evolution cadence independently of the
+  // Monotonic close counter — drives the Darwin recalc cadence independently of the
   // capped rolling window. performance.length plateaus at 500, so `length % N`
   // would fire on *every* close once the cap is hit; totalClosed never resets.
   data.totalClosed = (data.totalClosed || 0) + 1;
@@ -107,18 +101,9 @@ export async function recordPerformance(perf) {
     });
   }
 
-  // Evolve thresholds every 5 closed positions — only when auto-evolve is enabled
-  if (data.totalClosed % MIN_EVOLVE_POSITIONS === 0) {
-    const { config, reloadScreeningThresholds } = await import("./config.js");
-    if (config.management.autoEvolve) {
-      const result = evolveThresholds(data.performance, config);
-      if (result?.changes && Object.keys(result.changes).length > 0) {
-        reloadScreeningThresholds();
-        log("evolve", `Auto-evolved thresholds: ${JSON.stringify(result.changes)}`);
-      }
-    } else {
-      log("evolve", `Auto-evolve OFF — skipped threshold evolution at ${data.totalClosed} closed (run /evolve to evolve manually)`);
-    }
+  // Recalculate adaptive signal weights every N closed positions (Darwin — optional, off by default)
+  if (data.totalClosed % DARWIN_RECALC_POSITIONS === 0) {
+    const { config } = await import("./config.js");
     if (config.darwin?.enabled) {
       const { recalculateWeights } = await import("./signal-weights.js");
       const wResult = recalculateWeights(data.performance, config);
@@ -238,114 +223,6 @@ function derivLesson(perf) {
   };
 }
 
-// ─── Adaptive Threshold Evolution ──────────────────────────────
-
-export function evolveThresholds(perfData, config) {
-  if (!perfData || perfData.length < MIN_EVOLVE_POSITIONS) return null;
-
-  const winners = perfData.filter((p) => p.pnl_pct > 0);
-  const losers  = perfData.filter((p) => p.pnl_pct < -5);
-  if (winners.length < 2 && losers.length < 2) return null;
-
-  const changes = {}, rationale = {};
-
-  // ── 1. maxVolatility ─────────────────────────────────────────
-  {
-    const winnerVols = winners.map((p) => p.volatility).filter(isFiniteNum);
-    const loserVols  = losers.map((p) => p.volatility).filter(isFiniteNum);
-    const current    = config.screening.maxVolatility;
-    if (current != null && loserVols.length >= 2) {
-      const loserP25 = percentile(loserVols, 25);
-      if (loserP25 < current) {
-        const newVal = clamp(nudge(current, loserP25 * 1.15, MAX_CHANGE_PER_STEP), 1.0, 20.0);
-        const rounded = Number(newVal.toFixed(1));
-        if (rounded < current) { changes.maxVolatility = rounded; rationale.maxVolatility = `Losers clustered at ~${loserP25.toFixed(1)} — tightened ${current} → ${rounded}`; }
-      }
-    } else if (current != null && winnerVols.length >= 3 && losers.length === 0) {
-      const winnerP75 = percentile(winnerVols, 75);
-      if (winnerP75 > current * 1.1) {
-        const newVal = clamp(nudge(current, winnerP75 * 1.1, MAX_CHANGE_PER_STEP), 1.0, 20.0);
-        const rounded = Number(newVal.toFixed(1));
-        if (rounded > current) { changes.maxVolatility = rounded; rationale.maxVolatility = `All ${winners.length} profitable — loosened ${current} → ${rounded}`; }
-      }
-    }
-  }
-
-  // ── 2. minFeeActiveTvlRatio ──────────────────────────────────
-  {
-    const winnerFees = winners.map((p) => p.fee_tvl_ratio).filter(isFiniteNum);
-    const loserFees  = losers.map((p) => p.fee_tvl_ratio).filter(isFiniteNum);
-    const current    = config.screening.minFeeActiveTvlRatio;
-    if (current != null && winnerFees.length >= 2) {
-      const minWF = Math.min(...winnerFees);
-      if (minWF > current * 1.2) {
-        const newVal = clamp(nudge(current, minWF * 0.85, MAX_CHANGE_PER_STEP), 0.05, 10.0);
-        const rounded = Number(newVal.toFixed(2));
-        if (rounded > current) { changes.minFeeActiveTvlRatio = rounded; rationale.minFeeActiveTvlRatio = `Lowest winner=${minWF.toFixed(2)} — raised ${current} → ${rounded}`; }
-      }
-    }
-    if (current != null && loserFees.length >= 2 && !changes.minFeeActiveTvlRatio) {
-      const maxLF = Math.max(...loserFees);
-      if (maxLF < current * 1.5 && winnerFees.length > 0 && Math.min(...winnerFees) > maxLF) {
-        const newVal = clamp(nudge(current, maxLF * 1.2, MAX_CHANGE_PER_STEP), 0.05, 10.0);
-        const rounded = Number(newVal.toFixed(2));
-        if (rounded > current) { changes.minFeeActiveTvlRatio = rounded; rationale.minFeeActiveTvlRatio = `Losers fee_tvl<=${maxLF.toFixed(2)} — raised ${current} → ${rounded}`; }
-      }
-    }
-  }
-
-  // ── 3. minOrganic ─────────────────────────────────────────────
-  {
-    const loserOrg = losers.map((p) => p.organic_score).filter(isFiniteNum);
-    const winnerOrg = winners.map((p) => p.organic_score).filter(isFiniteNum);
-    const current = config.screening.minOrganic;
-    if (loserOrg.length >= 2 && winnerOrg.length >= 1) {
-      const avgL = avg(loserOrg), avgW = avg(winnerOrg);
-      if (avgW - avgL >= 10) {
-        const newVal = clamp(Math.round(nudge(current, Math.max(Math.min(...winnerOrg) - 3, current), MAX_CHANGE_PER_STEP)), 60, 90);
-        if (newVal > current) { changes.minOrganic = newVal; rationale.minOrganic = `Winner avg ${avgW.toFixed(0)} vs loser ${avgL.toFixed(0)} — raised ${current} → ${newVal}`; }
-      }
-    }
-  }
-
-  // ── 4. minTvl (NEW — from enrichment) ─────────────────────────
-  {
-    const loserTvls = losers.map((p) => p.pool_tvl_usd).filter(isFiniteNum);
-    const winnerTvls = winners.map((p) => p.pool_tvl_usd).filter(isFiniteNum);
-    const current = config.screening.minTvl ?? 0;
-    if (loserTvls.length >= 2 && winnerTvls.length >= 1) {
-      const lMed = percentile(loserTvls, 50), wMed = percentile(winnerTvls, 50);
-      if (wMed > lMed * 1.5) {
-        const newVal = clamp(nudge(current, lMed * 1.2, MAX_CHANGE_PER_STEP), 0, 500_000);
-        const rounded = Math.round(newVal);
-        if (rounded > current) { changes.minTvl = rounded; rationale.minTvl = `Loser median TVL=$${lMed.toFixed(0)} vs winner=$${wMed.toFixed(0)} — raised $${current} → $${rounded}`; }
-      }
-    }
-  }
-
-  if (Object.keys(changes).length === 0) return { changes: {}, rationale: {} };
-
-  // Persist
-  let userConfig = {};
-  if (fs.existsSync(USER_CONFIG_PATH)) { try { userConfig = JSON.parse(fs.readFileSync(USER_CONFIG_PATH, "utf8")); } catch {} }
-  Object.assign(userConfig, changes);
-  userConfig._lastEvolved = new Date().toISOString();
-  userConfig._positionsAtEvolution = perfData.length;
-  fs.writeFileSync(USER_CONFIG_PATH, JSON.stringify(userConfig, null, 2));
-
-  const s = config.screening;
-  for (const [k, v] of Object.entries(changes)) { if (s[k] !== undefined) s[k] = v; }
-
-  const data = load();
-  data.lessons.push({
-    id: nextLessonId(data),
-    rule: `[AUTO-EVOLVED @ ${perfData.length} positions] ${Object.entries(changes).map(([k,v]) => `${k}=${v}`).join(", ")} — ${Object.values(rationale).join("; ")}`,
-    tags: ["evolution", "config_change"], outcome: "manual", created_at: new Date().toISOString(),
-  });
-  save(data);
-  return { changes, rationale };
-}
-
 // ─── Bootstrap from On-Chain History ──────────────────────────
 
 export async function bootstrapFromHistory(walletAddress, { limit = 10, force = false } = {}) {
@@ -404,25 +281,13 @@ export async function bootstrapFromHistory(walletAddress, { limit = 10, force = 
 
 function isFiniteNum(n) { return typeof n === "number" && isFinite(n); }
 // Unique lesson id. Date.now() alone collides when several lessons are created in
-// the same millisecond (e.g. the bootstrap loop, or evolution lesson right after
+// the same millisecond (e.g. the bootstrap loop, or a derived lesson right after
 // a close lesson). Bump past any existing id so pin/unpin/remove stay 1:1.
 function nextLessonId(data) {
   let id = Date.now();
   const used = new Set((data?.lessons || []).map((l) => l.id));
   while (used.has(id)) id++;
   return id;
-}
-function avg(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }
-function percentile(arr, p) {
-  const sorted = [...arr].sort((a, b) => a - b);
-  const idx = (p / 100) * (sorted.length - 1);
-  const lo = Math.floor(idx), hi = Math.ceil(idx);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
-}
-function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
-function nudge(current, target, maxChange) {
-  const delta = target - current, maxDelta = current * maxChange;
-  return Math.abs(delta) <= maxDelta ? target : current + Math.sign(delta) * maxDelta;
 }
 
 // ─── Manual Lessons ────────────────────────────────────────────
