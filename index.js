@@ -9,7 +9,7 @@ import { getTopCandidates } from "./tools/screening.js";
 import { config, computeDeployAmount } from "./config.js";
 import { getPerformanceSummary, bootstrapFromHistory } from "./lessons.js";
 import { registerCronRestarter } from "./tools/executor.js";
-import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, isEnabled as telegramEnabled, createLiveMessage } from "./telegram.js";
+import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, notifyClose, isEnabled as telegramEnabled, createLiveMessage } from "./telegram.js";
 import { generateBriefing } from "./briefing.js";
 import { getLastBriefingDate, setLastBriefingDate, getTrackedPosition, setPositionInstruction, setPendingCloseReason, updatePnlAndCheckExits, queuePeakConfirmation, resolvePendingPeak, queueTrailingDropConfirmation, resolvePendingTrailingDrop, queueStopLossConfirmation, resolvePendingStopLoss } from "./state.js";
 import { getActiveStrategy } from "./strategy-library.js";
@@ -22,6 +22,24 @@ log("startup", `Mode: ${process.env.DRY_RUN === "true" ? "DRY RUN" : "LIVE"}`);
 log("startup", `Model: ${process.env.LLM_MODEL || "openrouter/healer-alpha"}`);
 
 const DEPLOY = config.management.deployAmountSol;
+
+// Build the rich Telegram close-card payload from a closePosition() result.
+// Used by the direct exit paths (trailing TP / stop loss / manual) which bypass
+// the executor's notifyClose call.
+function closeNotifyPayload(res, fallbackPair, fallbackReason) {
+  return {
+    pair: res.pool_name || fallbackPair,
+    pnlUsd: res.pnl_usd ?? 0,
+    pnlPct: res.pnl_pct ?? 0,
+    reason: res.reason || fallbackReason,
+    feesUsd: res.fees_usd,
+    minutesHeld: res.minutes_held,
+    minutesInRange: res.minutes_in_range,
+    strategy: res.strategy,
+    pool: res.pool,
+    tx: res.close_txs?.[0] ?? res.txs?.[0],
+  };
+}
 
 // ═══════════════════════════════════════════
 //  CYCLE TIMERS
@@ -120,8 +138,9 @@ function scheduleTrailingDropConfirmation(positionAddress) {
         log("state", `[Trailing recheck] Confirmed trailing exit for ${positionAddress} — closing directly`);
         try {
           setPendingCloseReason(positionAddress, null); // explicit trailing reason is authoritative
-          await closePosition({ position_address: positionAddress, reason: resolved.reason });
+          const closeRes = await closePosition({ position_address: positionAddress, reason: resolved.reason });
           log("state", `[Trailing TP] Direct close succeeded for ${positionAddress}`);
+          if (closeRes?.success) notifyClose(closeNotifyPayload(closeRes, positionAddress.slice(0, 8), resolved.reason)).catch(() => {});
         } catch (closeErr) {
           log("cron_error", `[Trailing TP] Direct close failed for ${positionAddress}: ${closeErr.message} — falling back to management cycle`);
           runManagementCycle({ silent: true }).catch((e) => log("cron_error", `Trailing recheck management failed: ${e.message}`));
@@ -153,8 +172,9 @@ function scheduleStopLossConfirmation(positionAddress) {
         log("state", `[SL recheck] Confirmed stop loss for ${positionAddress} — closing directly`);
         try {
           setPendingCloseReason(positionAddress, null); // explicit stop-loss reason is authoritative
-          await closePosition({ position_address: positionAddress, reason: resolved.reason });
+          const closeRes = await closePosition({ position_address: positionAddress, reason: resolved.reason });
           log("state", `[Stop Loss] Direct close succeeded for ${positionAddress}`);
+          if (closeRes?.success) notifyClose(closeNotifyPayload(closeRes, positionAddress.slice(0, 8), resolved.reason)).catch(() => {});
         } catch (closeErr) {
           log("cron_error", `[Stop Loss] Direct close failed for ${positionAddress}: ${closeErr.message} — falling back to management cycle`);
           runManagementCycle({ silent: true }).catch((e) => log("cron_error", `SL recheck management failed: ${e.message}`));
@@ -422,7 +442,7 @@ After executing, write a brief one-line result per position.
       }
       for (const p of positions) {
         if (!p.in_range && p.minutes_out_of_range >= config.management.outOfRangeWaitMinutes) {
-          notifyOutOfRange({ pair: p.pair, minutesOOR: p.minutes_out_of_range }).catch(() => { });
+          notifyOutOfRange({ pair: p.pair, minutesOOR: p.minutes_out_of_range, pnlPct: p.pnl_pct }).catch(() => { });
         }
       }
     }
@@ -891,9 +911,7 @@ async function telegramHandler(msg) {
       setPendingCloseReason(pos.position, null); // manual close — no deterministic rule reason
       const result = await closePosition({ position_address: pos.position });
       if (result.success) {
-        const closeTxs = result.close_txs?.length ? result.close_txs : result.txs;
-        const claimNote = result.claim_txs?.length ? `\nClaim txs: ${result.claim_txs.join(", ")}` : "";
-        await sendMessage(`✅ Closed ${pos.pair}\nPnL: ${config.management.solMode ? "◎" : "$"}${result.pnl_usd ?? "?"} | close txs: ${closeTxs?.join(", ") || "n/a"}${claimNote}`);
+        await notifyClose(closeNotifyPayload(result, pos.pair, "manual close")).catch(() => {});
       } else {
         await sendMessage(`❌ Close failed: ${JSON.stringify(result)}`);
       }

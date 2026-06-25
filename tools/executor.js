@@ -315,9 +315,34 @@ export async function executeTool(name, args) {
       if (name === "swap_token" && result.tx) {
         notifySwap({ inputSymbol: args.input_mint?.slice(0, 8), outputSymbol: args.output_mint === "So11111111111111111111111111111111111111112" || args.output_mint === "SOL" ? "SOL" : args.output_mint?.slice(0, 8), amountIn: result.amount_in, amountOut: result.amount_out, tx: result.tx }).catch(() => {});
       } else if (name === "deploy_position") {
-        notifyDeploy({ pair: result.pool_name || args.pool_name || args.pool_address?.slice(0, 8), amountSol: args.amount_y ?? args.amount_sol ?? 0, position: result.position, tx: result.txs?.[0] ?? result.tx, priceRange: result.price_range, binStep: result.bin_step, baseFee: result.base_fee }).catch(() => {});
+        notifyDeploy({
+          pair: result.pool_name || args.pool_name || args.pool_address?.slice(0, 8),
+          amountSol: args.amount_y ?? args.amount_sol ?? 0,
+          strategy: result.strategy,
+          position: result.position,
+          pool: result.pool,
+          tx: result.txs?.[0] ?? result.tx,
+          priceRange: result.price_range,
+          binStep: result.bin_step,
+          baseFee: result.base_fee,
+          volatility: result.volatility ?? args.volatility,
+          feeTvlRatio: result.fee_tvl_ratio ?? args.fee_tvl_ratio,
+          organicScore: result.organic_score ?? args.organic_score,
+          downsidePct: result.downside_pct,
+        }).catch(() => {});
       } else if (name === "close_position") {
-        notifyClose({ pair: result.pool_name || args.position_address?.slice(0, 8), pnlUsd: result.pnl_usd ?? 0, pnlPct: result.pnl_pct ?? 0 }).catch(() => {});
+        notifyClose({
+          pair: result.pool_name || args.position_address?.slice(0, 8),
+          pnlUsd: result.pnl_usd ?? 0,
+          pnlPct: result.pnl_pct ?? 0,
+          reason: result.reason || args.reason,
+          feesUsd: result.fees_usd,
+          minutesHeld: result.minutes_held,
+          minutesInRange: result.minutes_in_range,
+          strategy: result.strategy,
+          pool: result.pool,
+          tx: result.close_txs?.[0] ?? result.txs?.[0] ?? result.tx,
+        }).catch(() => {});
         // Note low-yield closes in pool memory so screener avoids redeploying
         if (args.reason && args.reason.toLowerCase().includes("yield")) {
           const poolAddr = result.pool || args.pool_address;

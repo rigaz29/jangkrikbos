@@ -320,9 +320,14 @@ export async function deployPosition({
       pool_name,
       bin_range: { min: minBinId, max: maxBinId, active: activeBin.binId },
       price_range: { min: minPrice, max: maxPrice },
+      active_price: activePrice,
+      downside_pct: activePrice > 0 ? ((minPrice - activePrice) / activePrice) * 100 : null,
       bin_step: actualBinStep,
       base_fee: actualBaseFee,
       strategy: activeStrategy,
+      volatility: volatility ?? null,
+      fee_tvl_ratio: fee_tvl_ratio ?? null,
+      organic_score: organic_score ?? null,
       wide_range: isWideRange,
       amount_x: finalAmountX,
       amount_y: finalAmountY,
@@ -957,6 +962,9 @@ export async function closePosition({ position_address, reason }) {
         }
       }
 
+      const closeReason = tracked?.pending_close_reason || reason || "agent decision";
+      const minutesInRange = Math.max(0, minutesHeld - minutesOOR);
+
       await recordPerformance({
         position: position_address,
         pool: poolAddress,
@@ -971,9 +979,9 @@ export async function closePosition({ position_address, reason }) {
         fees_earned_usd: feesUsd,
         final_value_usd: finalValueUsd,
         initial_value_usd: initialUsd,
-        minutes_in_range: minutesHeld - minutesOOR,
+        minutes_in_range: minutesInRange,
         minutes_held: minutesHeld,
-        close_reason: tracked?.pending_close_reason || reason || "agent decision",
+        close_reason: closeReason,
       });
 
       return {
@@ -987,6 +995,13 @@ export async function closePosition({ position_address, reason }) {
         pnl_usd: pnlUsd,
         pnl_pct: pnlPct,
         base_mint: pool.lbPair.tokenXMint.toString(),
+        reason: closeReason,
+        fees_usd: feesUsd,
+        minutes_held: minutesHeld,
+        minutes_in_range: minutesInRange,
+        strategy: tracked.strategy || null,
+        initial_value_usd: initialUsd,
+        final_value_usd: finalValueUsd,
       };
     }
 

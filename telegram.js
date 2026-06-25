@@ -334,49 +334,113 @@ export function stopPolling() {
   _polling = false;
 }
 
-// ─── Notification helpers ────────────────────────────────────────
-export async function notifyDeploy({ pair, amountSol, position, tx, priceRange, binStep, baseFee }) {
-  if (hasActiveLiveMessage()) return;
-  const priceStr = priceRange
-    ? `Price range: ${priceRange.min < 0.0001 ? priceRange.min.toExponential(3) : priceRange.min.toFixed(6)} – ${priceRange.max < 0.0001 ? priceRange.max.toExponential(3) : priceRange.max.toFixed(6)}\n`
-    : "";
-  const poolStr = (binStep || baseFee)
-    ? `Bin step: ${binStep ?? "?"}  |  Base fee: ${baseFee != null ? baseFee + "%" : "?"}\n`
-    : "";
-  await sendHTML(
-    `✅ <b>Deployed</b> ${pair}\n` +
-    `Amount: ${amountSol} SOL\n` +
-    priceStr +
-    poolStr +
-    `Position: <code>${position?.slice(0, 8)}...</code>\n` +
-    `Tx: <code>${tx?.slice(0, 16)}...</code>`
-  );
+// ─── Formatting helpers ──────────────────────────────────────────
+function esc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function num(n) { return typeof n === "number" && isFinite(n); }
+
+function fmtUsdSigned(n) {
+  if (!num(n)) return "?";
+  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+  return `${sign}$${Math.abs(n).toFixed(2)}`;
+}
+function fmtUsdCompact(n) {
+  if (!num(n)) return "?";
+  const a = Math.abs(n);
+  if (a >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (a >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toFixed(2)}`;
+}
+function fmtPct(n) {
+  if (!num(n)) return "?";
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${n.toFixed(2)}%`;
+}
+function fmtPrice(p) {
+  if (!num(p)) return "?";
+  return p < 0.0001 ? p.toExponential(2) : p < 1 ? p.toFixed(6) : p.toFixed(4);
+}
+function fmtDuration(minutes) {
+  if (!num(minutes) || minutes < 0) return "?";
+  const d = Math.floor(minutes / 1440);
+  const h = Math.floor((minutes % 1440) / 60);
+  const m = Math.floor(minutes % 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+function solscanTx(tx, label = "Tx") {
+  return tx ? `<a href="https://solscan.io/tx/${tx}">${label}</a>` : "";
+}
+function solscanAcct(addr, label) {
+  return addr ? `<a href="https://solscan.io/account/${addr}">${label}</a>` : "";
+}
+function linkRow(parts) {
+  const links = parts.filter(Boolean);
+  return links.length ? `\n\n🔗 ${links.join("  ·  ")}` : "";
 }
 
-export async function notifyClose({ pair, pnlUsd, pnlPct }) {
+// ─── Notification helpers ────────────────────────────────────────
+export async function notifyDeploy({ pair, amountSol, strategy, position, pool, tx, priceRange, binStep, baseFee, volatility, feeTvlRatio, organicScore, downsidePct }) {
   if (hasActiveLiveMessage()) return;
-  const sign = pnlUsd >= 0 ? "+" : "";
-  await sendHTML(
-    `🔒 <b>Closed</b> ${pair}\n` +
-    `PnL: ${sign}$${(pnlUsd ?? 0).toFixed(2)} (${sign}${(pnlPct ?? 0).toFixed(2)}%)`
-  );
+  const lines = [`🟢 <b>OPENED</b> · ${esc(pair)}`, ""];
+  lines.push(`💰 <b>${amountSol} SOL</b>${strategy ? `  ·  ${esc(strategy)}` : ""}`);
+  if (priceRange) {
+    const buf = num(downsidePct) ? `  (▼${Math.abs(downsidePct).toFixed(0)}% buffer)` : "";
+    lines.push(`📊 Range: ${fmtPrice(priceRange.min)} → ${fmtPrice(priceRange.max)}${buf}`);
+  }
+  if (num(volatility) && strategy) {
+    lines.push(`🧭 ${esc(strategy)} — volatility ${Number(volatility).toFixed(1)}`);
+  }
+  const market = [];
+  if (num(Number(feeTvlRatio))) market.push(`Fee/TVL ${Number(feeTvlRatio).toFixed(2)}%`);
+  if (num(Number(organicScore))) market.push(`Organic ${Math.round(organicScore)}`);
+  if (num(Number(binStep))) market.push(`Bin ${binStep}`);
+  if (num(Number(baseFee))) market.push(`Base fee ${baseFee}%`);
+  if (market.length) lines.push("", `📈 ${market.join("  ·  ")}`);
+  await sendHTML(lines.join("\n") + linkRow([solscanAcct(position, "Position"), solscanAcct(pool, "Pool"), solscanTx(tx)]));
+}
+
+export async function notifyClose({ pair, pnlUsd, pnlPct, reason, feesUsd, minutesHeld, minutesInRange, strategy, position, pool, tx }) {
+  const win = (pnlUsd ?? 0) >= 0;
+  const lines = [
+    `${win ? "🟢" : "🔴"} <b>CLOSED</b> · ${esc(pair)}`,
+    "",
+    `${win ? "📈" : "📉"} <b>${fmtUsdSigned(pnlUsd)}</b>  (${fmtPct(pnlPct)})`,
+  ];
+  if (reason) lines.push(`📋 ${esc(reason)}`);
+  const stats = [];
+  if (num(minutesHeld)) stats.push(`Held ${fmtDuration(minutesHeld)}`);
+  if (num(minutesInRange) && num(minutesHeld) && minutesHeld > 0) {
+    const re = Math.round((minutesInRange / minutesHeld) * 100);
+    stats.push(`In-range ${Math.max(0, Math.min(100, re))}%`);
+  }
+  if (num(feesUsd)) stats.push(`Fees ${fmtUsdCompact(feesUsd)}`);
+  if (strategy) stats.push(esc(strategy));
+  if (stats.length) lines.push(`⏱ ${stats.join("  ·  ")}`);
+  await sendHTML(lines.join("\n") + linkRow([solscanAcct(pool, "Pool"), solscanTx(tx)]));
 }
 
 export async function notifySwap({ inputSymbol, outputSymbol, amountIn, amountOut, tx }) {
   if (hasActiveLiveMessage()) return;
+  const inS = esc(inputSymbol), outS = esc(outputSymbol);
   await sendHTML(
-    `🔄 <b>Swapped</b> ${inputSymbol} → ${outputSymbol}\n` +
-    `In: ${amountIn ?? "?"} | Out: ${amountOut ?? "?"}\n` +
-    `Tx: <code>${tx?.slice(0, 16)}...</code>`
+    `🔄 <b>SWAPPED</b> · ${inS} → ${outS}\n` +
+    `${amountIn ?? "?"} ${inS}  →  ${amountOut ?? "?"} ${outS}` +
+    linkRow([solscanTx(tx)])
   );
 }
 
-export async function notifyOutOfRange({ pair, minutesOOR }) {
+export async function notifyOutOfRange({ pair, minutesOOR, pnlPct }) {
   if (hasActiveLiveMessage()) return;
-  await sendHTML(
-    `⚠️ <b>Out of Range</b> ${pair}\n` +
-    `Been OOR for ${minutesOOR} minutes`
-  );
+  const lines = [
+    `⚠️ <b>OUT OF RANGE</b> · ${esc(pair)}`,
+    `Drifted out for ${fmtDuration(minutesOOR)}`,
+  ];
+  if (num(pnlPct)) lines.push(`Current PnL: ${fmtPct(pnlPct)}`);
+  await sendHTML(lines.join("\n"));
 }
 
 function sleep(ms) {
