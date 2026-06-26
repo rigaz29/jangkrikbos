@@ -126,6 +126,13 @@ export async function getTopCandidates({ limit = 10 } = {}) {
 
   const eligible = pools
     .filter((p) => {
+      // Meridian deploys SOL-side only — the deploy seeds the quote (Y) side as SOL
+      // (9 decimals). Drop non-SOL-quoted pools (e.g. USDC-quoted): the wallet has no
+      // quote token to deposit, so the on-chain deploy fails with insufficient funds.
+      if (p.quote?.mint && p.quote.mint !== config.tokens.SOL) {
+        pushFilteredReason(filteredOut, p, `non-SOL quote (${p.quote.symbol || p.quote.mint.slice(0, 8)})`);
+        return false;
+      }
       if (occupiedPools.has(p.pool)) {
         pushFilteredReason(filteredOut, p, "already have an open position in this pool");
         return false;

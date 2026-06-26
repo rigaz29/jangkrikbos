@@ -178,6 +178,14 @@ export async function deployPosition({
   const wallet = getWallet();
   const pool = await getPool(pool_address);
   const baseMint = pool.lbPair.tokenXMint.toString();
+  // Meridian only supports SOL-quoted pools (deploy seeds the Y side as SOL).
+  // Reject non-SOL quotes (e.g. USDC) up front so we never simulate a deposit
+  // that fails with insufficient funds (no quote-token balance).
+  const quoteMint = pool.lbPair.tokenYMint?.toString();
+  if (quoteMint && quoteMint !== config.tokens.SOL) {
+    log("deploy", `Pool ${pool_address.slice(0, 8)} is not SOL-quoted (quote=${quoteMint.slice(0, 8)}) — skipping`);
+    return { success: false, error: "Pool is not SOL-quoted — Meridian only deploys into SOL-paired pools. Pick a SOL-quoted pool." };
+  }
   if (isBaseMintOnCooldown(baseMint)) {
     log("deploy", `Base mint ${baseMint.slice(0, 8)} is on cooldown — skipping deploy for pool ${pool_address.slice(0, 8)}`);
     return { success: false, error: "Token on cooldown — recently closed out-of-range too many times. Try a different token." };
