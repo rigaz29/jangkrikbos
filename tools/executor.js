@@ -167,6 +167,7 @@ const toolMap = {
       autoSwapAfterClaim: ["management", "autoSwapAfterClaim"],
       autoSweepStranded: ["management", "autoSweepStranded"],
       outOfRangeBinsToClose: ["management", "outOfRangeBinsToClose"],
+      outOfRangePctToClose: ["management", "outOfRangePctToClose"],
       outOfRangeWaitMinutes: ["management", "outOfRangeWaitMinutes"],
       oorCooldownTriggerCount: ["management", "oorCooldownTriggerCount"],
       oorCooldownHours: ["management", "oorCooldownHours"],

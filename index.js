@@ -337,9 +337,14 @@ export async function runManagementCycle({ silent = false } = {}) {
         actionMap.set(p.position, { action: "CLOSE", rule: 2, reason: "take profit" });
         continue;
       }
-      // Rule 3: pumped far above range
+      // Rule 3: pumped far above range. Threshold is a price % converted to bins
+      // via the pool's bin_step (consistent across pools); falls back to the raw
+      // bin count when no % is set or bin_step is unknown.
+      const pumpBins = (config.management.outOfRangePctToClose != null && tracked?.bin_step > 0)
+        ? Math.ceil(Math.log(1 + config.management.outOfRangePctToClose / 100) / Math.log(1 + tracked.bin_step / 10000))
+        : config.management.outOfRangeBinsToClose;
       if (p.active_bin != null && p.upper_bin != null &&
-          p.active_bin > p.upper_bin + config.management.outOfRangeBinsToClose) {
+          p.active_bin > p.upper_bin + pumpBins) {
         actionMap.set(p.position, { action: "CLOSE", rule: 3, reason: "pumped far above range" });
         continue;
       }
