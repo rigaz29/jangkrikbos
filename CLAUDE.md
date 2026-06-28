@@ -171,7 +171,7 @@ bins = ceil( |ln(1 ± targetPct)| / ln(1 + binStep / 10000) )
 
 | Side | Source % | Applies to |
 |------|----------|------------|
-| `binsBelow` | `targetDownsidePct` (default 0.35 → covers a 35% drop) | always |
+| `binsBelow` | strategy-specific: `targetDownsideBidAsk` (0.40) for bid_ask, `targetDownsideSpot` (0.30) for spot; falls back to `targetDownsidePct` | always |
 | `binsAbove` | `targetUpsidePct` (default 0.20 → 20% rise) | **spot only** — `bid_ask` forces `binsAbove = 0` |
 
 So **volatility decides the SHAPE, not the width**: it picks the strategy

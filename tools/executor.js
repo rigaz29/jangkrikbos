@@ -195,6 +195,8 @@ const toolMap = {
       generalModel: ["llm", "generalModel"],
       // strategy
       targetDownsidePct: ["strategy", "targetDownsidePct"],
+      targetDownsideBidAsk: ["strategy", "targetDownsideBidAsk"],
+      targetDownsideSpot: ["strategy", "targetDownsideSpot"],
       targetUpsidePct:   ["strategy", "targetUpsidePct"],
       volatilityStrategyThreshold: ["strategy", "volatilityStrategyThreshold"],
     };

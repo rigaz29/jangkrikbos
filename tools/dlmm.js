@@ -140,7 +140,11 @@ export async function deployPosition({
     activeStrategy = strategy || config.strategy.strategy;
   }
 
-  const targetDownside = config.strategy.targetDownsidePct ?? 0.35;
+  // Downside range width is strategy-specific (spot is calmer → tighter; bid_ask
+  // accumulates dips → wider). Falls back to the generic targetDownsidePct.
+  const targetDownside = (activeStrategy === "spot"
+    ? config.strategy.targetDownsideSpot
+    : config.strategy.targetDownsideBidAsk) ?? config.strategy.targetDownsidePct ?? 0.35;
   const targetUpside   = config.strategy.targetUpsidePct   ?? 0.20;
 
   // Preliminary estimate using provided bin_step (used for DRY_RUN and wide-range check)

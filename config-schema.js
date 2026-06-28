@@ -65,7 +65,9 @@ export const CONFIG_SCHEMA = [
   // ─── Strategy ───────────────────────────────────────────────────────────
   { key: "strategy",              section: "strategy", def: "bid_ask", help: "Fallback LP strategy when volatility isn't provided (manual deploys): bid_ask|spot." },
   { key: "volatilityStrategyThreshold", section: "strategy", def: 2.5, help: "Pool volatility >= this => bid_ask (high-vol, OOR-resilient, accumulate dips); below => spot (two-sided fee farming). Drives strategy deterministically on autonomous deploys." },
-  { key: "targetDownsidePct",     section: "strategy", def: 0.35,     help: "Bin range covers this % price drop below the active bin." },
+  { key: "targetDownsidePct",     section: "strategy", def: 0.35,     help: "Fallback downside range % when the strategy-specific key is unset." },
+  { key: "targetDownsideBidAsk",  section: "strategy", def: 0.40,     help: "Downside range % for bid_ask (high-vol, accumulate dips → wider). Falls back to targetDownsidePct." },
+  { key: "targetDownsideSpot",    section: "strategy", def: 0.30,     help: "Downside range % for spot (calmer token → tighter). Falls back to targetDownsidePct." },
   { key: "targetUpsidePct",       section: "strategy", def: 0.20,     help: "Bin range covers this % price rise above the active bin (spot only)." },
 
   // ─── Schedule ───────────────────────────────────────────────────────────
