@@ -20,7 +20,7 @@ import {
 } from "../state.js";
 import { recordPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
-import { normalizeMint, autoSwapToSol } from "./wallet.js";
+import { normalizeMint, autoSwapToSol, swapToken } from "./wallet.js";
 
 // ─── Lazy SDK loader ───────────────────────────────────────────
 // @meteora-ag/dlmm → @coral-xyz/anchor uses CJS directory imports
@@ -222,8 +222,28 @@ export async function deployPosition({
 
   // Calculate amounts
   // If amount_y is not provided but amount_sol is, use amount_sol (for backward compatibility)
-  const finalAmountY = amount_y ?? amount_sol ?? 0;
-  const finalAmountX = amount_x ?? 0;
+  let finalAmountY = amount_y ?? amount_sol ?? 0;
+  let finalAmountX = amount_x ?? 0;
+
+  // Spot fills bins ABOVE the active bin with the BASE token (X), but we fund
+  // from SOL only — so those bins would stay empty. Seed them by swapping the
+  // upside value-share of the SOL into the base token before depositing.
+  // Best-effort: if the swap fails, fall back to a SOL-only deposit.
+  if (activeStrategy === "spot" && finalAmountX === 0 && finalAmountY > 0 && finalBinsAbove > 0) {
+    const upShare = finalBinsAbove / (finalBinsBelow + finalBinsAbove);
+    const solToSwap = parseFloat((finalAmountY * upShare).toFixed(6));
+    if (solToSwap > 0) {
+      log("deploy", `Spot: swapping ${solToSwap} SOL → base to seed ${finalBinsAbove} upper bins (share ${(upShare * 100).toFixed(0)}%)`);
+      const sw = await swapToken({ input_mint: config.tokens.SOL, output_mint: baseMint, amount: solToSwap });
+      if (sw?.success && sw.amount_out > 0) {
+        finalAmountX = sw.amount_out;
+        finalAmountY = parseFloat((finalAmountY - solToSwap).toFixed(6));
+        log("deploy", `Spot: received ${finalAmountX} base token; SOL side now ${finalAmountY}`);
+      } else {
+        log("deploy_warn", `Spot base swap failed (${sw?.error || "unknown"}) — depositing SOL-only; upper bins will be empty`);
+      }
+    }
+  }
 
   const totalYLamports = new BN(Math.floor(finalAmountY * 1e9));
   // For X, we assume it's also 9 decimals for now, or we'd need to fetch mint decimals.
