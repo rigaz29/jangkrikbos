@@ -237,6 +237,17 @@ export function getPoolMemory({ pool_address }) {
 }
 
 /**
+ * Where the active bin sits within the deployed range, as a %:
+ * 100 = top of range (upper_bin), 0 = bottom (lower_bin). Null if bins missing
+ * or degenerate. Can fall outside 0–100 when OOR (>100 = pumped above the range,
+ * <0 = dumped below it).
+ */
+export function rangePositionPct(lower, upper, active) {
+  if (lower == null || upper == null || active == null || upper === lower) return null;
+  return Math.round(((active - lower) / (upper - lower)) * 1000) / 10;
+}
+
+/**
  * Record a live position snapshot during a management cycle.
  * Builds a trend dataset while position is still open — not just at close.
  * Keeps last 48 snapshots per pool (~4h at 5min intervals).
@@ -270,6 +281,7 @@ export function recordPositionSnapshot(poolAddress, snapshot) {
     pnl_pct: snapshot.pnl_pct ?? null,
     pnl_usd: snapshot.pnl_usd ?? null,
     in_range: snapshot.in_range ?? null,
+    range_position_pct: rangePositionPct(snapshot.lower_bin, snapshot.upper_bin, snapshot.active_bin),
     unclaimed_fees_usd: snapshot.unclaimed_fees_usd ?? null,
     minutes_out_of_range: snapshot.minutes_out_of_range ?? null,
     age_minutes: snapshot.age_minutes ?? null,

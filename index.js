@@ -13,7 +13,7 @@ import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, not
 import { generateBriefing } from "./briefing.js";
 import { getLastBriefingDate, setLastBriefingDate, getTrackedPosition, setPositionInstruction, setPendingCloseReason, updatePnlAndCheckExits, queuePeakConfirmation, resolvePendingPeak, queueTrailingDropConfirmation, resolvePendingTrailingDrop, queueStopLossConfirmation, resolvePendingStopLoss } from "./state.js";
 import { getActiveStrategy } from "./strategy-library.js";
-import { recordPositionSnapshot, recallForPool, addPoolNote } from "./pool-memory.js";
+import { recordPositionSnapshot, recallForPool, addPoolNote, rangePositionPct } from "./pool-memory.js";
 import { checkSmartWalletsOnPool } from "./smart-wallets.js";
 import { getTokenNarrative, getTokenInfo } from "./tools/token.js";
 
@@ -40,6 +40,17 @@ function closeNotifyPayload(res, fallbackPair, fallbackReason) {
     tx: res.close_txs?.[0] ?? res.txs?.[0],
     autoSwapFailed: res.auto_swap_failed,
   };
+}
+
+// Render where the active price sits within the deployed range:
+// [████░░░░░░] 40% in-range, or ▲/▼ when out of range.
+function rangeBar(p, segments = 10) {
+  const pct = rangePositionPct(p.lower_bin, p.upper_bin, p.active_bin);
+  if (pct == null) return "";
+  if (pct > 100) return `▲ ${Math.round(pct - 100)}% above range`;
+  if (pct < 0) return `▼ ${Math.round(-pct)}% below range`;
+  const filled = Math.max(0, Math.min(segments, Math.round((pct / 100) * segments)));
+  return `[${"█".repeat(filled)}${"░".repeat(segments - filled)}] ${Math.round(pct)}%`;
 }
 
 // Safety net: swap stray non-SOL tokens back to SOL (e.g. a close that landed
@@ -923,7 +934,9 @@ async function telegramHandler(msg) {
         const pnl = p.pnl_usd >= 0 ? `+${cur}${p.pnl_usd}` : `-${cur}${Math.abs(p.pnl_usd)}`;
         const age = p.age_minutes != null ? `${p.age_minutes}m` : "?";
         const oor = !p.in_range ? " ⚠️OOR" : "";
-        return `${i + 1}. ${p.pair} | ${cur}${p.total_value_usd} | PnL: ${pnl} | fees: ${cur}${p.unclaimed_fees_usd} | ${age}${oor}`;
+        const bar = rangeBar(p);
+        return `${i + 1}. ${p.pair} | ${cur}${p.total_value_usd} | PnL: ${pnl} | fees: ${cur}${p.unclaimed_fees_usd} | ${age}${oor}` +
+          (bar ? `\n   range: ${bar}` : "");
       });
       await sendMessage(`📊 Open Positions (${total_positions}):\n\n${lines.join("\n")}\n\n/close <n> to close | /set <n> <note> to set instruction`);
     } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => {}); }
