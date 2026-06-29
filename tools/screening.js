@@ -256,6 +256,24 @@ export async function getTopCandidates({ limit = 10 } = {}) {
       if (eligible.length < before) log("screening", `ATH filter removed ${before - eligible.length} pool(s)`);
     }
 
+    // ATH-drop filter — skip pools that have already fallen too far from ATH
+    // (dead/dumped tokens). e.g. maxAthDropPct=80 drops price <= 20% of ATH.
+    const maxAthDrop = config.screening.maxAthDropPct;
+    if (maxAthDrop != null) {
+      const before = eligible.length;
+      eligible.splice(0, eligible.length, ...eligible.filter((p) => {
+        if (p.price_vs_ath_pct == null) return true; // no ATH data → don't filter
+        const dropPct = 100 - p.price_vs_ath_pct;
+        if (dropPct > maxAthDrop) {
+          log("screening", `ATH-drop filter: dropped ${p.name} — down ${dropPct.toFixed(0)}% from ATH (limit: ${maxAthDrop}%)`);
+          pushFilteredReason(filteredOut, p, `down ${dropPct.toFixed(0)}% from ATH > ${maxAthDrop}% limit`);
+          return false;
+        }
+        return true;
+      }));
+      if (eligible.length < before) log("screening", `ATH-drop filter removed ${before - eligible.length} pool(s)`);
+    }
+
     // Drop any pools whose creator is on the dev blocklist (caught via advanced-info)
     const before = eligible.length;
     const filtered = eligible.filter((p) => {

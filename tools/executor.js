@@ -160,6 +160,7 @@ const toolMap = {
       minTokenAgeHours: ["screening", "minTokenAgeHours"],
       maxTokenAgeHours: ["screening", "maxTokenAgeHours"],
       athFilterPct:     ["screening", "athFilterPct"],
+      maxAthDropPct:    ["screening", "maxAthDropPct"],
       maxVolatility:    ["screening", "maxVolatility"],
       minFeePerTvl24h: ["management", "minFeePerTvl24h"],
       // management

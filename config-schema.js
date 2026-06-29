@@ -36,7 +36,8 @@ export const CONFIG_SCHEMA = [
   { key: "allowedLaunchpads",     section: "screening", def: [],       help: "If non-empty, only deploy into these launchpads." },
   { key: "minTokenAgeHours",      section: "screening", def: null,     help: "Min token age in hours (null = no minimum)." },
   { key: "maxTokenAgeHours",      section: "screening", def: null,     help: "Max token age in hours (null = no maximum)." },
-  { key: "athFilterPct",          section: "screening", def: null,     help: "Only deploy if price is >= this % below ATH, e.g. -20 (null = off)." },
+  { key: "athFilterPct",          section: "screening", def: null,     help: "Only deploy if price is >= this % below ATH, e.g. -20 (null = off). Avoids buying near the top." },
+  { key: "maxAthDropPct",         section: "screening", def: null,     help: "Skip pools already down more than this % from ATH, e.g. 80 = avoid tokens down >=80% from ATH (dead/slow-rug). null = off." },
   { key: "maxVolatility",         section: "screening", def: 10,       help: "Max pool volatility at screening time (~0-5 typical, 5+ high). Hard filter." },
 
   // ─── Management ─────────────────────────────────────────────────────────
