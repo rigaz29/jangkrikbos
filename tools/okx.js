@@ -36,21 +36,60 @@ function buildAuthHeaders(method, path, body = "") {
   return headers;
 }
 
-async function okxRequest(method, path, body = null) {
-  const bodyText = body == null ? "" : JSON.stringify(body);
-  const headers = hasAuth()
-    ? { ...buildAuthHeaders(method, path, bodyText), ...(body != null ? { "Content-Type": "application/json" } : {}) }
-    : { ...PUBLIC_HEADERS, ...(body != null ? { "Content-Type": "application/json" } : {}) };
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// OKX business error codes that are transient (rate limit / system busy).
+const OKX_RETRYABLE_CODES = new Set(["50011", "50013", "50026"]);
 
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    ...(body != null ? { body: bodyText } : {}),
-  });
-  if (!res.ok) throw new Error(`OKX API ${res.status}: ${path}`);
-  const json = await res.json();
-  if (json.code !== "0" && json.code !== 0) throw new Error(`OKX error ${json.code}: ${json.msg || json.message || "unknown"}`);
-  return json.data;
+// Global pacing gate. OKX caps at 3 req/s, so serialize EVERY OKX request (across
+// all callers + retries) to stay safely under it (~2.5 req/s). Single-threaded JS
+// makes the slot reservation atomic, so even concurrent callers queue 400ms apart.
+const OKX_MIN_INTERVAL_MS = 400;
+let _okxNextSlot = 0;
+async function _okxGate() {
+  const now = Date.now();
+  const start = Math.max(now, _okxNextSlot);
+  _okxNextSlot = start + OKX_MIN_INTERVAL_MS;
+  if (start > now) await _sleep(start - now);
+}
+
+async function okxRequest(method, path, body = null, retries = 3) {
+  const bodyText = body == null ? "" : JSON.stringify(body);
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const last = attempt === retries - 1;
+    // Rebuild headers each attempt — the auth signature embeds a fresh timestamp.
+    const headers = hasAuth()
+      ? { ...buildAuthHeaders(method, path, bodyText), ...(body != null ? { "Content-Type": "application/json" } : {}) }
+      : { ...PUBLIC_HEADERS, ...(body != null ? { "Content-Type": "application/json" } : {}) };
+
+    await _okxGate(); // respect OKX's 3 req/s limit
+    let res;
+    try {
+      res = await fetch(`${BASE}${path}`, { method, headers, ...(body != null ? { body: bodyText } : {}) });
+    } catch (e) {
+      if (last) throw e;
+      await _sleep(400 * (attempt + 1) ** 2); // network/timeout — back off and retry
+      continue;
+    }
+
+    // 429 (rate limit) and 5xx are transient — back off and retry.
+    if ((res.status === 429 || res.status >= 500) && !last) {
+      const ra = parseInt(res.headers.get("retry-after") || "", 10);
+      await _sleep(Number.isFinite(ra) ? ra * 1000 : 400 * (attempt + 1) ** 2);
+      continue;
+    }
+    if (!res.ok) throw new Error(`OKX API ${res.status}: ${path}`);
+
+    const json = await res.json();
+    if (json.code !== "0" && json.code !== 0) {
+      if (OKX_RETRYABLE_CODES.has(String(json.code)) && !last) {
+        await _sleep(400 * (attempt + 1) ** 2);
+        continue;
+      }
+      throw new Error(`OKX error ${json.code}: ${json.msg || json.message || "unknown"}`);
+    }
+    return json.data;
+  }
+  throw new Error(`OKX request failed after ${retries} attempts: ${path}`);
 }
 
 async function okxGet(path) {
